@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appointment Form</title>
+    <style>
+        /* General Body Styling */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        /* Form Container */
+        form {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        /* Input Field Styling */
+        input[type="text"],
+        input[type="email"],
+        input[type="date"],
+        input[type="time"] {
+            width: 100%;
+            padding: 12px 15px;
+            margin: 10px 0 20px 0;
+            display: inline-block;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        /* Focus State */
+        input[type="text"]:focus,
+        input[type="email"]:focus,
+        input[type="date"]:focus,
+        input[type="time"]:focus {
+            border-color: #0078ff;
+            outline: none;
+            box-shadow: 0 0 5px rgba(0, 120, 255, 0.5);
+        }
+
+        /* Submit Button Styling */
+        .u-btn-1 {
+            display: inline-block;
+            width: 100%;
+            padding: 12px 20px;
+            font-size: 16px;
+            color: #ffffff;
+            background-color: #0078ff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            transition: background-color 0.3s ease;
+        }
+
+        .u-btn-1:hover {
+            background-color: #0056cc;
+        }
+
+        /* Success & Error Messages */
+        .u-form-send-success,
+        .u-form-send-error {
+            display: none;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #ffffff;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .u-form-send-success {
+            background-color: #28a745;
+        }
+
+        .u-form-send-error {
+            background-color: #dc3545;
+        }
+
+        /* Align Success and Error Messages */
+        .u-form-send-message {
+            text-align: center;
+        }
+
+        /* Form Title */
+        form h2 {
+            margin-bottom: 20px;
+            color: #333333;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <form action="/" method="post" class="u-clearfix u-form-spacing-19 u-form-vertical u-inner-form" source="email" name="form">
+        <h2>Appointment Form</h2>
+
+        <div class="u-form-group u-form-name u-form-group-1">
+            <label for="doctor_name" class="u-form-control-hidden u-label">Doctor Name</label>
+            <input
+                type="text"
+                placeholder="Enter your Name"
+                id="doctor_name"
+                name="doctor_name"
+                required=""
+            />
+        </div>
+        <!-- Name Field -->
+        <div class="u-form-group u-form-name u-form-group-1">
+            <label for="patient_name" class="u-form-control-hidden u-label">Patient Name</label>
+            <input
+                type="text"
+                placeholder="Enter your Name"
+                id="patient_name"
+                name="patient_name"
+                required=""
+            />
+        </div>
+
+        <!-- Email Field -->
+        <div class="u-form-email u-form-group u-form-group-2">
+            <label for="email" class="u-form-control-hidden u-label">Email</label>
+            <input
+                type="email"
+                placeholder="Enter a valid email address"
+                id="email"
+                name="email"
+                required=""
+            />
+        </div>
+
+        <!-- Appointment Date Field -->
+        <div class="u-form-group u-form-date u-form-group-3">
+            <label for="appointment_date" class="u-form-control-hidden u-label">Appointment Date</label>
+            <input
+                type="date"
+                id="appointment_date"
+                name="appointment_date"
+                required=""
+            />
+        </div>
+
+        <!-- Appointment Time Field -->
+        <div class="u-form-group u-form-time u-form-group-4">
+            <label for="appointment_time" class="u-form-control-hidden u-label">Appointment Time</label>
+            <input
+                type="time"
+                id="appointment_time"
+                name="appointment_time"
+                required=""
+            />
+        </div>
+
+        <!-- Submit Button -->
+        <div class="u-align-left u-form-group u-form-submit u-form-group-5">
+            <button type="submit" class="u-btn-1">Confirm</button>
+        </div>
+
+        <!-- Success Message -->
+        <div class="u-form-send-message u-form-send-success">
+            Thank you! Your appointment has been scheduled.
+        </div>
+
+        <!-- Error Message -->
+        <div class="u-form-send-error u-form-send-message">
+            Unable to schedule your appointment. Please fix errors and try again.
+        </div>
+    </form>
+</body>
+</html>
