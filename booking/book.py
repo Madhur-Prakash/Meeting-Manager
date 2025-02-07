@@ -12,33 +12,26 @@ templates = Jinja2Templates(directory="booking/templates")
 
 client =  aioredis.from_url('redis://localhost', decode_responses=True)
 
-async def cache(data: str):
-    CacheData = str(await client.hgetall(f"data:{data}"))
+# async def cache(data: str):
+#     user = conn.booking.appointment.find_one({"email": data})
+#     CacheData = await client.get(f"doctor_name:{user['doctor_name']}")
+#     if user:
+#         if CacheData:
+#             CacheData1 = await client.get(f"doctor_name:{user['doctor_name']}"),
+#             CacheData2 = await client.get(f"appointment_date:{user['appointment_date']}"),
+#             CacheData3 = await client.get(f"appointment_time:{user['appointment_time']}")
+#             # CacheData = {"docotr name":CacheData1, "appointment date": CacheData2, "appointment time": CacheData3}
+#             print("data is cached", CacheData)
+#             return 0
+#         raise HTTPException(status_code=400, detail="User not found")
 
-    if CacheData.startswith("{"):
-        return None
-    if CacheData:
-        print("data is cached", CacheData)
-        return CacheData
-
-    user = conn.booking.appointment.find_one({"email": data})
-    if user:
-        print("Searching for data in database")
-        await client.hset(f"data:{data}", mapping={
-            "doctor_name": str(user["doctor_name"]),
-            "patient_name": str(user["patient_name"]),
-            "email": str(user["email"]),
-            "appointment_date": str(user["appointment_date"]),
-            "appointment_time": str(user["appointment_time"])
-        })
-        return {
-            "doctor_name": str(user["doctor_name"]),
-            "patient_name": str(user["patient_name"]),
-            "email": str(user["email"]),
-            "appointment_date": str(user["appointment_date"]),
-            "appointment_time": str(user["appointment_time"])
-        }
-    return None
+#     elif user:
+#         print("Searching for data in database")
+#         await client.set(f"doctor_name:{user['doctor_name']}",user['doctor_name'], ex=30),
+#         await client.set(f"appointment_date:{user['appointment_date']}",user['appointment_date'], ex=30),
+#         await client.set(f"appointment_time:{user['appointment_time']}",user['appointment_time'], ex=30)
+#         return data
+#     return None
 
 @book.get("/", response_class=HTMLResponse)
 async def read_appointment(request: Request):
@@ -65,17 +58,17 @@ async def book_appointment(request: Request):
         form_dict = dict(form)
 
 
-        #  check in cache
-        cached_data = await cache(form_dict["email"])
-        if cached_data:
-            # new_appointment = conn.booking.appointment.insert_one(form_dict)
-            # count_doc = conn.booking.appointment.count_documents({
-            # "doctor_name": form_dict["doctor_name"],
-            # "appointment_date": form_dict["appointment_date"]})
-            # update_doc = conn.booking.appointment.update_one({
-            # "_id": new_appointment.inserted_id}, {
-            # "$set": {"number_of_appointments": count_doc}}) 
-            return cached_data
+        # #  check in cache
+        # cached_data = await cache(form_dict["email"])
+        # if cached_data:
+        #     # new_appointment = conn.booking.appointment.insert_one(form_dict)
+        #     # count_doc = conn.booking.appointment.count_documents({
+        #     # "doctor_name": form_dict["doctor_name"],
+        #     # "appointment_date": form_dict["appointment_date"]})
+        #     # update_doc = conn.booking.appointment.update_one({
+        #     # "_id": new_appointment.inserted_id}, {
+        #     # "$set": {"number_of_appointments": count_doc}}) 
+        #     return cached_data
             
 
         # Check if doctor exists
@@ -86,13 +79,19 @@ async def book_appointment(request: Request):
         if not doctor_appointment:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found, please choose a different doctor.")
         
+        # check if user exist
+        user = conn.auth.User.find_one({"email": form_dict["email"]}) # for now all patients(user are stored in User collection inside auth db)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
         # Convert appointment time to datetime for comparisons
         appointment_datetime = datetime.strptime(f"{form_dict['appointment_date']} {form_dict['appointment_time']}", "%Y-%m-%d %H:%M")
         
         # Check for existing appointments with 30-minute overlap
         existing_appointments = list(conn.booking.appointment.find({
             "doctor_name": form_dict["doctor_name"],
-            "appointment_date": form_dict["appointment_date"]
+            "appointment_date": form_dict["appointment_date"],
+             "user_name": form_dict["user_name"]
         }))
 
         for existing_appt in existing_appointments:
