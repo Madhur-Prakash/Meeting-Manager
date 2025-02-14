@@ -18,3 +18,9 @@ class User(BaseModel):
     password2: str = Field(..., title="Confirm Password")
     phone_number: int = Field(..., min_length=10, title="Phone Number")
     disabled: bool = Field(default=False, title="User Account Status")
+
+class res(BaseModel):
+    doctor_name: Optional[str]
+    appointment_date: Optional[str]
+    appointment_time: Optional[str]
+    user_name: Optional[str]
