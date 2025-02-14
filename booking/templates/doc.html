@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doctor Appointments</title>
+</head>
+<body>
+    <h1>Doctor Appointments</h1>
+    {% if appointments %}
+        <ul>
+            {% for appointment in appointments %}
+                <li>
+                    {% for key, value in appointment.items() %}
+                        <strong>{{ key }}:</strong> {{ value }}<br>
+                    {% endfor %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No appointments found.</p>
+    {% endif %}
+</body>
+</html>
