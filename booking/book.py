@@ -13,10 +13,10 @@ templates = Jinja2Templates(directory="booking/templates")
 client =  aioredis.from_url('redis://localhost', decode_responses=True)
 
 async def cache_appointment(data: dict):
-    email = data["email"]
-    appointment_key = f"appointment:{email}:{data['appointment_date']}:{data['appointment_time']}"
+    appointment_key = f"appointment:{data['appointment_date']}:{data['appointment_time']}:{data['email']} ; {data['patient_name']}"
     await client.hset(appointment_key, mapping={
         "doctor_name": data['doctor_name'],
+        "patient_name": data['patient_name'],
         "appointment_date": data['appointment_date'],
         "appointment_time": data['appointment_time'],
         "user_name": data['user_name'],
@@ -24,14 +24,16 @@ async def cache_appointment(data: dict):
     await client.expire(appointment_key, 7 * 24 * 60 * 60)  # Cache for 7 days
     print("Appointment cached successfully")
 
-async def get_cached_appointments(email: str):
-    keys = await client.keys(f"appointment:{email}:*")
+async def get_cached_appointments(data: dict):
+    keys = await client.keys(f"appointment:{data['appointment_date']}:{data['appointment_time']}*")
+    print(keys) #debugging
     appointments = []
     for key in keys:
         cached_data = await client.hgetall(key)
         if cached_data:
             appointments.append(cached_data)
     if appointments:
+        print(appointments) #debugging
         print("Appointments fetched from cache")
         return appointments
     return None
@@ -43,7 +45,7 @@ async def insert_in_db(form: dict):
                 "user_name": form["user_name"],
                 "appointment_date": form["appointment_date"]
             })
-            update_doc = conn.booking.appointment.update_one({
+            conn.booking.appointment.update_one({
                 "_id": new_appointment.inserted_id
             }, {
                 "$set": {
@@ -84,7 +86,7 @@ async def book_appointment(request: Request):
         form_dict = dict(form)
         
         # Check if data is cached
-        cached_data = await get_cached_appointments(form_dict["email"])
+        cached_data = await get_cached_appointments(form_dict)
         # Convert appointment time to datetime for comparisons
         appointment_datetime = datetime.strptime(f"{form_dict['appointment_date']} {form_dict['appointment_time']}", "%Y-%m-%d %H:%M")
         if cached_data:
@@ -101,6 +103,7 @@ async def book_appointment(request: Request):
             # Return the first cached appointment
             return models.res(**cached_data[0])
         
+        print("cache returned None") #debugging
         # covert every date-time into datetime object for comparison
         existing_appointments = list(conn.booking.appointment.find({
             "doctor_name": form_dict["doctor_name"],
@@ -118,9 +121,6 @@ async def book_appointment(request: Request):
 
         # Insert the new appointment into the database
         await insert_in_db(form_dict)
-        
-        # Cache the new appointment
-        await cache_appointment(form_dict)
         
         # Return the new appointment details
         return models.res(**form_dict)

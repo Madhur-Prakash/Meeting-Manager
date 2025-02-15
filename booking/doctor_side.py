@@ -9,27 +9,31 @@ doc = APIRouter()
 templates = Jinja2Templates(directory="booking/templates")
 client = aioredis.from_url('redis://localhost', decode_responses=True)
 
-async def cache_doctor(data: dict):
-    user_name = data["user_name"]
-    keys = await client.keys(f"appointment:{user_name}:*")
-    appointments = []
-    for key in keys:
-        cached_data = await client.hgetall(key)
-        if cached_data:
-            appointments.append(cached_data)
-    if appointments:
-        print("Appointments fetched from cache")
-        return appointments
-    return []
+async def cache(data: dict):
+    pass
 
-@doc.get("/{user_name}")
+@doc.get("/doctor/{user_name}", response_class=HTMLResponse)
 async def get_all(request: Request, user_name: str):
-    # First, properly await the MongoDB cursor
-    cursor = conn.booking.appointment.find({"doctor": user_name})
-    # Then convert the cursor to a list
-    appointments = await cursor.to_list(length=100)
+    try:
+        appointments = conn.booking.appointment.find({"user_name": user_name}).sort([("appointment_date", 1), ("appointment_time", 1)])
+        print(appointments) #debugging
+        appo = []
+        for appointment in appointments:
+            appointment_data = {
+                "patient_name": appointment["patient_name"],
+                "appointment_date": appointment["appointment_date"],
+                "appointment_time": appointment["appointment_time"]
+            }
+            appo.append(appointment_data)
+            
+            # Cache the appointment
+            await client.hset(
+                f"appointment:{user_name}:{appointment['_id']}", mapping=appointment_data)
+        
+        return templates.TemplateResponse("doc.html", {"request": request, "appointments": appo})
     
-    return templates.TemplateResponse(
-        "doc.html",
-        {"request": request, "appointments": appointments}
-    )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=str(e)
+        )
