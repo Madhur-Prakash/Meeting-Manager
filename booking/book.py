@@ -160,5 +160,5 @@ async def book_appointment(request: Request):
 
     except Exception as e:
         print(f"Error booking appointment: {str(e)}")
-        logger.warning(f"Error booking appointment: {str(e)}")
+        logger.error(f"Error booking appointment: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
