@@ -3,6 +3,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from datetime import datetime, timedelta
 from . import models
+import logging
+from logging.handlers import RotatingFileHandler
 from .databse import conn
 import aioredis
 
@@ -11,6 +13,35 @@ book = APIRouter()
 templates = Jinja2Templates(directory="booking/templates")
 
 client =  aioredis.from_url('redis://localhost', decode_responses=True)
+
+def setup_logging():
+    logger = logging.getLogger("book_log") # create logger
+    logger.setLevel(logging.INFO) # set log level
+
+    # create a file handler
+    file_handler = RotatingFileHandler(
+        "book.log", 
+        maxBytes=10000, # 10KB 
+        backupCount=500
+    )
+    file_handler.setLevel(logging.INFO) 
+
+    #  create a console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    # create a formatter
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                                  datefmt="%Y-%m-%d %H:%M:%S")
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    #  add the handlers to the logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    return logger
+
+logger = setup_logging() # initialize logger
 
 async def cache_appointment(data: dict):
     appointment_key = f"appointment:{data['appointment_date']}:{data['appointment_time']}:{data['email']} ; {data['patient_name']}"
@@ -100,6 +131,7 @@ async def book_appointment(request: Request):
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Appointment slot is too close to an existing appointment. Please choose a different time.")   
             # insert in db if no conflict
             await insert_in_db(form_dict)   
+            logger.info(f"Appointment booked successfull: {form_dict}")
             # Return the first cached appointment
             return models.res(**cached_data[0])
         
@@ -121,6 +153,7 @@ async def book_appointment(request: Request):
 
         # Insert the new appointment into the database
         await insert_in_db(form_dict)
+        logger.info(f"Appointment booked successfull: {form_dict}")
         
         # Return the new appointment details
         return models.res(**form_dict)
