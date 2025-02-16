@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 
@@ -10,10 +9,10 @@ class Booking(BaseModel):
     appointment_date: str
     appointment_time: str
 
-class User(BaseModel):
+class Doctor(BaseModel):
     full_name: str = Field(None, title="Full Name of the User")
     email: EmailStr = Field(..., title="Email Address")
-    user_name: str = Field(..., title="Username")
+    doctor_user_name: str = Field(..., title="Username")
     password: str = Field(..., title="Password")
     password2: str = Field(..., title="Confirm Password")
     phone_number: int = Field(..., min_length=10, title="Phone Number")
@@ -23,4 +22,4 @@ class res(BaseModel):
     doctor_name: Optional[str]
     appointment_date: Optional[str]
     appointment_time: Optional[str]
-    user_name: Optional[str]
+    doctor_user_name: Optional[str]

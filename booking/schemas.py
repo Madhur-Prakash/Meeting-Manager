@@ -9,11 +9,11 @@ def Booking(item) -> dict:
         "appointment_time": item["appointment_time"]
     }
 
-def user(item) -> dict:
+def doctor(item) -> dict:
     return {
         "_id": str(item["_id"]),
         "full_name": item["full_name"],
-        "user_name": item["user_name"],
+        "doctor_user_name": item["doctor_user_name"],
         "email": item["email"],
         "password": item["password"],
         "password2": item["password2"],
@@ -23,7 +23,7 @@ def user(item) -> dict:
         
 
 def userEntity(item) -> list:
-    return[user(item) for item in item] 
+    return[doctor(item) for item in item] 
 
 def BookingEntity(item) -> list:
     return [Booking(item) for item in item]

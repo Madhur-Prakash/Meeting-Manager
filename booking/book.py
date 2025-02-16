@@ -44,27 +44,27 @@ def setup_logging():
 logger = setup_logging() # initialize logger
 
 async def cache_appointment(data: dict):
-    appointment_key = f"appointment:{data['appointment_date']}:{data['appointment_time']}:{data['email']} ; {data['patient_name']}"
+    appointment_key = f"appointment:{data['appointment_date']}:{data['doctor_user_name']}:{data['appointment_time']}"
     await client.hset(appointment_key, mapping={
         "doctor_name": data['doctor_name'],
         "patient_name": data['patient_name'],
         "appointment_date": data['appointment_date'],
         "appointment_time": data['appointment_time'],
-        "user_name": data['user_name'],
+        "doctor_user_name": data['doctor_user_name'],
     })
     await client.expire(appointment_key, 7 * 24 * 60 * 60)  # Cache for 7 days
     print("Appointment cached successfully")
 
 async def get_cached_appointments(data: dict):
-    keys = await client.keys(f"appointment:{data['appointment_date']}:{data['appointment_time']}*")
-    print(keys) #debugging
+    keys = await client.keys(f"appointment:{data['appointment_date']}:{data['doctor_user_name']}*")
+    # print(keys) #debugging
     appointments = []
     for key in keys:
         cached_data = await client.hgetall(key)
         if cached_data:
             appointments.append(cached_data)
     if appointments:
-        print(appointments) #debugging
+        # print(appointments) #debugging
         print("Appointments fetched from cache")
         return appointments
     return None
@@ -73,7 +73,7 @@ async def insert_in_db(form: dict):
             new_appointment = conn.booking.appointment.insert_one(form)
             count_doc = conn.booking.appointment.count_documents({
                 "doctor_name": form["doctor_name"],
-                "user_name": form["user_name"],
+                "doctor_user_name": form["doctor_user_name"],
                 "appointment_date": form["appointment_date"]
             })
             conn.booking.appointment.update_one({
@@ -101,7 +101,7 @@ async def read_appointment(request: Request):
         new_docs.append({
             "id": str(doc["_id"]),  # Convert ObjectId to string
             "doctor_name": doc["doctor_name"],
-            "user_name": doc["user_name"],
+            "doctor_user_name": doc["doctor_user_name"],
             "patient_name": doc["patient_name"],
             "email": doc["email"],
             "appointment_date": doc["appointment_date"],
@@ -121,6 +121,18 @@ async def book_appointment(request: Request):
         # Convert appointment time to datetime for comparisons
         appointment_datetime = datetime.strptime(f"{form_dict['appointment_date']} {form_dict['appointment_time']}", "%Y-%m-%d %H:%M")
         if cached_data:
+            # Check if doctor exists
+            doctor_appointment = conn.auth.doctor.find_one({
+            "full_name": form_dict["doctor_name"],
+            "doctor_user_name": form_dict["doctor_user_name"]})
+            if not doctor_appointment:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found, please choose a different doctor.")
+        
+            # check if user exist
+            user = conn.auth.patient.find_one({"email": form_dict["email"]}) # for now all patients(user are stored in User collection inside auth db)
+            if not user:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
             # compare the cached appointment time with the new appointment time
             for existing_appt in cached_data:
                 existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}", "%Y-%m-%d %H:%M")
@@ -136,12 +148,28 @@ async def book_appointment(request: Request):
             return models.res(**cached_data[0])
         
         print("cache returned None") #debugging
+
+        # Check if doctor exists
+        doctor_appointment = conn.auth.doctor.find_one({
+            "full_name": form_dict["doctor_name"],
+            "doctor_user_name": form_dict["doctor_user_name"]
+        })
+        if not doctor_appointment:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found, please choose a different doctor.")
+        
+        # check if patient exist
+        user = conn.auth.patient.find_one({"email": form_dict["email"]}) # for now all patients(user are stored in User collection inside auth db)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
         # covert every date-time into datetime object for comparison
         existing_appointments = list(conn.booking.appointment.find({
             "doctor_name": form_dict["doctor_name"],
             "appointment_date": form_dict["appointment_date"],
-            "user_name": form_dict["user_name"]
+            "doctor_user_name": form_dict["doctor_user_name"]
         }))
+
+        print("existing app:",existing_appointments) #debugging
 
         for existing_appt in existing_appointments:
             existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}", "%Y-%m-%d %H:%M")
