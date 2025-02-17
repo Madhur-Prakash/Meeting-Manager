@@ -116,6 +116,10 @@ async def book_appointment(request: Request):
         form = await request.form()
         form_dict = dict(form)
         
+        required_fields = ["doctor_name", "doctor_user_name", "patient_name", "email", "appointment_date", "appointment_time"]
+        for field in required_fields:
+            if field not in form_dict:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
         # Check if data is cached
         cached_data = await get_cached_appointments(form_dict)
         # Convert appointment time to datetime for comparisons
