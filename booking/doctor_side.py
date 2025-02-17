@@ -7,7 +7,7 @@ from .databse import conn
 doc = APIRouter()
 
 templates = Jinja2Templates(directory="booking/templates")
-client = aioredis.from_url('redis://localhost', decode_responses=True)
+client = aioredis.from_url('redis://54.198.65.205:6379', decode_responses=True)
 
 async def cache(data: dict):
     pass

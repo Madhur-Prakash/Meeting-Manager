@@ -1,3 +1,4 @@
 appointment
 __pycache__
 *.log
+venv

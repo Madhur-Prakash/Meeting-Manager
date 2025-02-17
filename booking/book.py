@@ -12,7 +12,7 @@ book = APIRouter()
 
 templates = Jinja2Templates(directory="booking/templates")
 
-client =  aioredis.from_url('redis://localhost', decode_responses=True)
+client =  aioredis.from_url('redis://54.198.65.205:6379', decode_responses=True)
 
 def setup_logging():
     logger = logging.getLogger("book_log") # create logger
