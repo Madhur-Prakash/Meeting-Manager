@@ -2,8 +2,9 @@ from fastapi import APIRouter, Request, HTTPException, status
 from fastapi.templating import Jinja2Templates
 from datetime import datetime, timedelta
 from . import models
+import asyncio
 import traceback
-from .utils import setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment
+from .utils import setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment, send_email
 from .database import conn
 import aioredis
 
@@ -98,6 +99,68 @@ async def book_appointment(request: Request):
                 print("db hit for appointment")
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Appointment slot is too close to an existing appointment. Please choose a different time.")
 
+        html_body = f"""
+                        <html>
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
+    <table width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
+        <tr>
+            <td align="center">
+                <table width="600px" cellspacing="0" cellpadding="0" style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
+                    <tr>
+                        <td align="center">
+                            <h2 style="color: #2C3E50;">Appointment Confirmation</h2>
+                            <p style="color: #555; font-size: 16px;">Dear <strong>{form_dict['patient_name']}</strong>,</p>
+                            <p style="color: #555; font-size: 16px;">Thank you for booking your appointment with <strong>CuraDocs</strong>. Below are your appointment details:</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Doctor:</td>
+                                    <td style="color: #555; font-size: 16px;">Dr. {form_dict['doctor_name']}</td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Date:</td>
+                                    <td style="color: #555; font-size: 16px;">{form_dict['appointment_date']}</td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Time:</td>
+                                    <td style="color: #555; font-size: 16px;">{form_dict['appointment_time']}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <p style="color: #555; font-size: 16px;">Please arrive at least <strong> 15 minutes</strong> before your scheduled appointment. 
+                            <p style="color: #555; font-size: 16px;">We look forward to assisting you with your healthcare needs.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding-top: 20px;">
+                            <p style="color: #777; font-size: 14px;">Best regards,</p>
+                            <p style="color: #2C3E50; font-size: 16px; font-weight: bold;">CuraDocs Team</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding-top: 30px; border-top: 1px solid #ddd;">
+                            <p style="color: #888; font-size: 12px;">© 2025 CuraDocs. All rights reserved.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+        """
+        # send a confirmation email to the patient
+        email_sent = asyncio.create_task(send_email(form_dict["email"], "Appointment Confirmation", html_body, retries=3, delay=5))
+        if not email_sent:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")   
+        
+
         # Insert the new appointment into the database
         updated_form_dict = await insert_in_db(form_dict)
         logger.info(f"Appointment booked successfull: {updated_form_dict['appointment_id']}")
@@ -168,6 +231,70 @@ async def reschedule(request: Request, appointment_id: str):
             
             await cache_appointment(updated_mongo_doc) # updating the cache with the new appointment details
             await delete_cached_appointment(existing_appointment) # deleting the old appointment from the cache
+
+            html_body = f"""
+<html>
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
+    <table width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
+        <tr>
+            <td align="center">
+                <table width="600px" cellspacing="0" cellpadding="0" style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
+                    <tr>
+                        <td align="center">
+                            <h2 style="color: #2C3E50;">Appointment Reschedule Confirmation</h2>
+                            <p style="color: #555; font-size: 16px;">Dear <strong>{existing_appointment['patient_name']}</strong>,</p>
+                            <p style="color: #555; font-size: 16px;">Your appointment with <strong>CuraDocs</strong> has been successfully rescheduled. Below are your updated appointment details:</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Doctor:</td>
+                                    <td style="color: #555; font-size: 16px;">Dr. {existing_appointment['doctor_name']}</td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Date:</td>
+                                    <td style="color: #555; font-size: 16px;">{new_appointment_date}</td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Time:</td>
+                                    <td style="color: #555; font-size: 16px;">{new_appointment_time}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <p style="color: #555; font-size: 16px;">Please arrive at least <strong>15 minutes</strong> before your scheduled appointment.</p>
+                            <p style="color: #555; font-size: 16px;">If you need any further assistance, feel free to contact us.</p>
+                            <p style="color: #555; font-size: 16px;">We appreciate your trust in CuraDocs and look forward to serving you.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding-top: 20px;">
+                            <p style="color: #777; font-size: 14px;">Best regards,</p>
+                            <p style="color: #2C3E50; font-size: 16px; font-weight: bold;">CuraDocs Team</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding-top: 30px; border-top: 1px solid #ddd;">
+                            <p style="color: #888; font-size: 12px;">© 2025 CuraDocs. All rights reserved.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+
+            sent_mail = asyncio.create_task(send_email(existing_appointment["email"], "Appointment Reschedule Confirmation", html_body, retries=3, delay=5))
+            if not sent_mail:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
+
+
             logger.info(f"Appointment rescheduled successfully: {appointment_id}")
             return {"message": "Appointment rescheduled successfully", "appointment_id": appointment_id, "status": status.HTTP_200_OK}
 
@@ -187,6 +314,68 @@ async def reschedule(request: Request, appointment_id: str):
                 "email": existing_appointment["email"],
                 "appointment_date": new_appointment_date,
                 "appointment_time": new_appointment_time}
+            
+            html_body = f"""
+<html>
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
+    <table width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
+        <tr>
+            <td align="center">
+                <table width="600px" cellspacing="0" cellpadding="0" style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
+                    <tr>
+                        <td align="center">
+                            <h2 style="color: #2C3E50;">Appointment Reschedule Confirmation</h2>
+                            <p style="color: #555; font-size: 16px;">Dear <strong>{existing_appointment['patient_name']}</strong>,</p>
+                            <p style="color: #555; font-size: 16px;">Your appointment with <strong>CuraDocs</strong> has been successfully rescheduled. Below are your updated appointment details:</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Doctor:</td>
+                                    <td style="color: #555; font-size: 16px;">Dr. {existing_appointment['doctor_name']}</td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Date:</td>
+                                    <td style="color: #555; font-size: 16px;">{new_appointment_date}</td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Time:</td>
+                                    <td style="color: #555; font-size: 16px;">{new_appointment_time}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <p style="color: #555; font-size: 16px;">Please arrive at least <strong>15 minutes</strong> before your scheduled appointment.</p>
+                            <p style="color: #555; font-size: 16px;">If you need any further assistance, feel free to contact us.</p>
+                            <p style="color: #555; font-size: 16px;">We appreciate your trust in CuraDocs and look forward to serving you.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding-top: 20px;">
+                            <p style="color: #777; font-size: 14px;">Best regards,</p>
+                            <p style="color: #2C3E50; font-size: 16px; font-weight: bold;">CuraDocs Team</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding-top: 30px; border-top: 1px solid #ddd;">
+                            <p style="color: #888; font-size: 12px;">© 2025 CuraDocs. All rights reserved.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+
+            sent_mail = asyncio.create_task(send_email(existing_appointment["email"], "Appointment Reschedule Confirmation", html_body, retries=3, delay=5))
+            if not sent_mail:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 
             new_appointment = await insert_in_db(updated_mongo_doc)
             logger.info(f"Appointment rescheduled successfully: {new_appointment['appointment_id']}")
