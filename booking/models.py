@@ -8,11 +8,12 @@ class Booking(BaseModel):
     email: str
     appointment_date: str
     appointment_time: str
+    status: bool =False
 
 class Doctor(BaseModel):
     full_name: str = Field(None, title="Full Name of the User")
     email: EmailStr = Field(..., title="Email Address")
-    doctor_user_name: str = Field(..., title="Username")
+    CIN: str = Field(..., title="Username")
     password: str = Field(..., title="Password")
     password2: str = Field(..., title="Confirm Password")
     phone_number: int = Field(..., min_length=10, title="Phone Number")
@@ -22,4 +23,6 @@ class res(BaseModel):
     doctor_name: Optional[str]
     appointment_date: Optional[str]
     appointment_time: Optional[str]
-    doctor_user_name: Optional[str]
+    appointment_id: Optional[str]
+    CIN: Optional[str]
+    status: bool

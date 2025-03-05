@@ -1,7 +1,7 @@
 from fastapi import FastAPI
-from booking.book import book
-from booking.doctor_side import doc
+from booking.patient_side import patient_book
+from booking.doctor_side import doctor_book
 
 app=FastAPI()
-app.include_router(book)
-app.include_router(doc)
+app.include_router(doctor_book)
+app.include_router(patient_book)
