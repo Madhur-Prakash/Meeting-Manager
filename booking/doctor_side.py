@@ -15,7 +15,7 @@ templates = Jinja2Templates(directory="booking/templates")
 logger = setup_logging() # initialize logger
 
 # redis connection
-# client = aioredis.from_url('redis://default@54.198.65.205:6379', decode_responses=True) in production
+# client = aioredis.from_url('redis://default@54.87.254.150:6379', decode_responses=True) #in production
 
 client =  aioredis.from_url('redis://localhost', decode_responses=True) # in local testing
 
@@ -50,6 +50,11 @@ async def reschedule(request: Request, appointment_id: str):
         form_data = await request.json()
         new_appointment_date = form_data["appointment_date"]
         new_appointment_time = form_data["appointment_time"]
+        reason = form_data["reason"]
+
+        #  required fields
+        if not new_appointment_date or not new_appointment_time or not reason:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
 
         new_appointment_datetime = datetime.strptime(f"{new_appointment_date} {new_appointment_time}", "%Y-%m-%d %H:%M")
         
@@ -130,6 +135,10 @@ async def reschedule(request: Request, appointment_id: str):
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Time:</td>
                                     <td style="color: #555; font-size: 16px;">{new_appointment_time}</td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Reason for Rescheduling:</td>
+                                    <td style="color: #555; font-size: 16px;">{reason}</td>
                                 </tr>
                             </table>
                         </td>
@@ -213,6 +222,10 @@ async def reschedule(request: Request, appointment_id: str):
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Time:</td>
                                     <td style="color: #555; font-size: 16px;">{new_appointment_time}</td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Reason for Rescheduling:</td>
+                                    <td style="color: #555; font-size: 16px;">{reason}</td>
                                 </tr>
                             </table>
                         </td>

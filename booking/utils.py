@@ -20,9 +20,10 @@ from concurrent_log_handler import ConcurrentRotatingFileHandler
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 # redis connection
-# client = aioredis.from_url('redis://default@13.217.2.25:6379', decode_responses=True) #in production
+# client = aioredis.from_url('redis://default@54.87.254.150:6379', decode_responses=True) #in production
 
 client =  aioredis.from_url('redis://localhost', decode_responses=True) # in local testing
+
 
 def setup_logging():
     logger = logging.getLogger("auth_log") # create logger
@@ -127,9 +128,6 @@ async def insert_in_db(form: dict):
             # data caching after all the validation are done and appointment is booked
             await cache_appointment(form)
             return (form)
-
-
-
 
 def authenticate_gmail():
     """Authenticate and return Gmail API service."""
