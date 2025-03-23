@@ -14,6 +14,10 @@ templates = Jinja2Templates(directory="booking/templates")
 
 logger = setup_logging() # initialize logger
 
+@doctor_book.get("/healthz_appoint")
+def health_check():
+    return {"status": "ok"}
+
 @doctor_book.get("/doctor/{CIN}", response_class=HTMLResponse)
 async def get_all(request: Request, CIN: str):
     try:
