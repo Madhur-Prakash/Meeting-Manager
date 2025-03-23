@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Request, HTTPException, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-import aioredis
-import asyncio
+from .redis import client
+from . import models
 from datetime import datetime, timedelta
-from .utils import setup_logging, cache_appointment, delete_cached_appointment, insert_in_db,send_email
+from .utils import setup_logging, cache_appointment, delete_cached_appointment, insert_in_db, send_email, send_email_ses
 import traceback
 from .database import conn
 
@@ -13,11 +13,6 @@ doctor_book = APIRouter()
 templates = Jinja2Templates(directory="booking/templates")
 
 logger = setup_logging() # initialize logger
-
-# redis connection
-# client = aioredis.from_url('redis://default@54.87.254.150:6379', decode_responses=True) #in production
-
-client =  aioredis.from_url('redis://localhost', decode_responses=True) # in local testing
 
 @doctor_book.get("/doctor/{CIN}", response_class=HTMLResponse)
 async def get_all(request: Request, CIN: str):
@@ -44,17 +39,21 @@ async def get_all(request: Request, CIN: str):
         logger.error(f"Error fetching appointments: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
-@doctor_book.post("/doctor/appointment/reschedule/{appointment_id}", status_code=status.HTTP_302_FOUND)
-async def reschedule(request: Request, appointment_id: str):
+@doctor_book.post("/doctor/appointment/reschedule", status_code=status.HTTP_302_FOUND)
+async def reschedule(data: models.Reschedule_Appointment):
     try:
-        form_data = await request.json()
+        form = dict(data)
+        form_data = dict(form)
+
+        # required fields
+        required_fields = ["appointment_date", "appointment_time", "reason", "appointment_id"]
+        for field in required_fields:
+            if field not in form_data:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
+            
         new_appointment_date = form_data["appointment_date"]
         new_appointment_time = form_data["appointment_time"]
         reason = form_data["reason"]
-
-        #  required fields
-        if not new_appointment_date or not new_appointment_time or not reason:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
 
         new_appointment_datetime = datetime.strptime(f"{new_appointment_date} {new_appointment_time}", "%Y-%m-%d %H:%M")
         
@@ -62,7 +61,7 @@ async def reschedule(request: Request, appointment_id: str):
         # if new_appointment_datetime < datetime.now().isoformat():
         #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Appointment date cannot be in the past")
 
-        existing_appointment = await conn.booking.appointment.find_one({"appointment_id": appointment_id})
+        existing_appointment = await conn.booking.appointment.find_one({"appointment_id": form_data['appointment_id']})
         if not existing_appointment:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
         # Check if the slot is already booked
@@ -89,7 +88,7 @@ async def reschedule(request: Request, appointment_id: str):
             })
             # Update the current appointment's date and time
             await conn.booking.appointment.update_one(
-                {"appointment_id": appointment_id},
+                {"appointment_id": form_data['appointment_id']},
                 {"$set": {
                     "appointment_date": new_appointment_date,
                     "appointment_time": new_appointment_time}})
@@ -102,7 +101,7 @@ async def reschedule(request: Request, appointment_id: str):
                 "appointment_date": new_appointment_date,
                 "appointment_time": new_appointment_time,
                 "status": existing_appointment["status"],
-                "appointment_id": appointment_id}
+                "appointment_id": form_data['appointment_id']}
             
             await cache_appointment(updated_mongo_doc) # updating the cache with the new appointment details
             await delete_cached_appointment(existing_appointment) # deleting the old appointment from the cache
@@ -169,18 +168,18 @@ async def reschedule(request: Request, appointment_id: str):
 </html>
 """
 
-            sent_mail = asyncio.create_task(send_email(existing_appointment["email"], "Appointment Reschedule Confirmation", html_body, retries=3, delay=5))
+            sent_mail = send_email(existing_appointment["email"], "Appointment Reschedule Confirmation", html_body, retries=3, delay=5)
             if not sent_mail:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 
 
-            logger.info(f"Appointment rescheduled successfully: {appointment_id}")
-            return {"message": "Appointment rescheduled successfully", "appointment_id": appointment_id, "status": status.HTTP_200_OK}
+            logger.info(f"Appointment rescheduled successfully: {form_data['appointment_id']}")
+            return {"message": "Appointment rescheduled successfully", "appointment_id": form_data['appointment_id'], "status": status.HTTP_200_OK}
 
         # If the date has changed, update the number of appointments for the old date
         elif new_appointment_date != existing_appointment['appointment_date']:
             #  delete the old appointment from the database
-            await conn.booking.appointment.delete_one({"appointment_id": appointment_id})
+            await conn.booking.appointment.delete_one({"appointment_id": form_data['appointment_id']})
 
             #  delete the old appointment from the cache
             await delete_cached_appointment(existing_appointment)
@@ -256,7 +255,7 @@ async def reschedule(request: Request, appointment_id: str):
 </html>
 """
 
-            sent_mail = asyncio.create_task(send_email(existing_appointment["email"], "Appointment Reschedule Confirmation", html_body, retries=3, delay=5))
+            sent_mail = send_email(existing_appointment["email"], "Appointment Reschedule Confirmation", html_body, retries=3, delay=5)
             if not sent_mail:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 

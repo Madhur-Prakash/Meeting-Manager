@@ -2,28 +2,28 @@ import random
 import string
 import logging
 import os
+from .redis import client
+import traceback
 import base64
 import pickle
 import time
-# import BackgroundTasks
+# from .celery_app import celery
+import os
+from dotenv import load_dotenv
 from email.mime.text import MIMEText
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from .database import conn
 from fastapi import HTTPException, status
-import aioredis
 from concurrent_log_handler import ConcurrentRotatingFileHandler
 
+load_dotenv()
+
+NO_REPLY_EMAIL = os.getenv("NO_REPLY_EMAIL")
 
 # Define the scope for Gmail API
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
-
-# redis connection
-# client = aioredis.from_url('redis://default@54.87.254.150:6379', decode_responses=True) #in production
-
-client =  aioredis.from_url('redis://localhost', decode_responses=True) # in local testing
-
 
 def setup_logging():
     logger = logging.getLogger("auth_log") # create logger
@@ -152,7 +152,8 @@ def authenticate_gmail():
 
     return build("gmail", "v1", credentials=creds)
 
-async def send_email(to_email, subject, body, retries=3, delay=5):
+# @celery.tast()
+def send_email(to_email, subject, body, retries=3, delay=5):
     """Send an email using Gmail API with retry mechanism."""
     for attempt in range(retries):
         try:
@@ -171,6 +172,31 @@ async def send_email(to_email, subject, body, retries=3, delay=5):
             return sent_message
         except Exception as e:
             print(f"Failed to send email due to timeout: {e}. Retrying in {delay} seconds...")
-            # print(f"Error: {traceback.format_exc()}")
+            print(f"Error: {traceback.format_exc()}")
             time.sleep(delay)
     print("Failed to send email after multiple attempts.")
+
+
+# @celery.task()
+def send_email_ses(to_email, subject, body, retries=3, delay=5):
+    """Send an email using AWS SES with retry mechanism."""
+    for attempt in range(retries):
+        try:
+            response = client.send_email(
+                Source=NO_REPLY_EMAIL,  # Must be a verified email in AWS SES
+                Destination={
+                    "ToAddresses": [to_email]  # Ensure it's a LIST
+                },
+                Message={
+                    "Subject": {"Data": subject},
+                    "Body": {
+                        "Html": {"Data": body}
+                    }
+                }
+            )
+            print(f"Email sent! Message ID: {response['MessageId']}")
+            return response
+        except Exception as e:
+            print(f"Failed to send email due to error: {e}. Retrying in {delay} seconds...")
+            print(f"Error: {traceback.format_exc()}")
+            time.sleep(delay)

@@ -3,12 +3,21 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 
 class Booking(BaseModel):
-    doctor_name: str
-    patient_name: str
-    email: str
-    appointment_date: str
-    appointment_time: str
-    status: bool =False
+    doctor_name: str = Field(..., title = "doctor name")
+    patient_name: str = Field(..., title = "patient name")
+    email: str = Field(..., title = "Email of patient")
+    appointment_date: str = Field(..., title = "Appointment date")
+    appointment_time: str = Field(..., title = "Appointment time")
+    CIN: str = Field(..., title = "CIN of doctor")
+
+class Reschedule_Appointment(BaseModel):
+    appointment_date: str = Field(..., title = "Appointment date")
+    appointment_time: str = Field(..., title = "Appointment time")
+    reason: str = Field(..., title = "Reason for rescheduling")
+    appointment_id: str = Field(..., title = "Appointment ID")
+
+class cancel(BaseModel):
+    appointment_id: str = Field(..., title = "Appointment ID")
 
 class Doctor(BaseModel):
     full_name: str = Field(None, title="Full Name of the User")
