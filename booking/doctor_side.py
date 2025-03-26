@@ -273,10 +273,11 @@ async def reschedule(data: models.Reschedule_Appointment):
         print(traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
     
-@doctor_book.post("/doctor/appointment/done/{appointment_id}", status_code=status.HTTP_302_FOUND)
-async def done_appointment(request: Request, appointment_id: str):
+@doctor_book.post("/doctor/appointment/done", status_code=status.HTTP_302_FOUND)
+async def done_appointment(data: models.done):
     try:
-        form_data = await request.json()
+        form_data = dict(data)
+        appointment_id = form_data['appointment_id']
         status = form_data["status"]
 
         existing_appointment = await conn.booking.appointment.find_one({"appointment_id": appointment_id})

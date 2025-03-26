@@ -19,6 +19,10 @@ class Reschedule_Appointment(BaseModel):
 class cancel(BaseModel):
     appointment_id: str = Field(..., title = "Appointment ID")
 
+class done(BaseException):
+    appointment_id: str = Field(..., title = "Appointment ID")
+    status: str = Field(..., title="Status of appointment")
+
 class Doctor(BaseModel):
     full_name: str = Field(None, title="Full Name of the User")
     email: EmailStr = Field(..., title="Email Address")
