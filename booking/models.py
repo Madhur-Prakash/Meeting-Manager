@@ -19,7 +19,7 @@ class Reschedule_Appointment(BaseModel):
 class cancel(BaseModel):
     appointment_id: str = Field(..., title = "Appointment ID")
 
-class done(BaseException):
+class done(BaseModel):
     appointment_id: str = Field(..., title = "Appointment ID")
     status: str = Field(..., title="Status of appointment")
 

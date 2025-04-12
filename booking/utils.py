@@ -6,6 +6,7 @@ from .redis import client
 import traceback
 import base64
 import pickle
+import requests
 import time
 # from .celery_app import celery
 import os
@@ -200,3 +201,14 @@ def send_email_ses(to_email, subject, body, retries=3, delay=5):
             print(f"Failed to send email due to error: {e}. Retrying in {delay} seconds...")
             print(f"Error: {traceback.format_exc()}")
             time.sleep(delay)
+
+def create_new_log(log_type: str, message: str, head: str):
+    url ="http://127.0.0.1:8000/backend/create_new_logs"
+    log = {
+         "log_type": log_type,
+         "message": message}
+    headers = {
+        "X-Source-Endpoint": head}
+            
+    resp = requests.post(url, json=log, headers=headers)
+    return resp

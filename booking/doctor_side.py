@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from .redis import client
 from . import models
 from datetime import datetime, timedelta
-from .utils import setup_logging, cache_appointment, delete_cached_appointment, insert_in_db, send_email, send_email_ses
+from .utils import setup_logging, cache_appointment, delete_cached_appointment, insert_in_db, send_email, send_email_ses, create_new_log
 import traceback
 from .database import conn
 
@@ -39,7 +39,8 @@ async def get_all(request: Request, CIN: str):
         return templates.TemplateResponse("doc.html", {"request": request, "appointments": appo})
     
     except Exception as e:
-        print(traceback.format_exc())
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error fetching appointments: {formatted_error}", "/api/backend/Appointment")
         logger.error(f"Error fetching appointments: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
@@ -176,7 +177,7 @@ async def reschedule(data: models.Reschedule_Appointment):
             if not sent_mail:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 
-
+            create_new_log("info", f"Appointment rescheduled successfully: {form_data['appointment_id']}", "/api/backend/Appointment")
             logger.info(f"Appointment rescheduled successfully: {form_data['appointment_id']}")
             return {"message": "Appointment rescheduled successfully", "appointment_id": form_data['appointment_id'], "status": status.HTTP_200_OK}
 
@@ -264,11 +265,14 @@ async def reschedule(data: models.Reschedule_Appointment):
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 
             new_appointment = await insert_in_db(updated_mongo_doc)
+            create_new_log("info", f"Appointment rescheduled successfully: {new_appointment['appointment_id']}", "/api/backend/Appointment")
             logger.info(f"Appointment rescheduled successfully: {new_appointment['appointment_id']}")
             return {"message": "Appointment rescheduled successfully", "appointment_id": new_appointment['appointment_id'], "status": status.HTTP_200_OK}
     
 #****************************************************************************************************************************************************
     except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error rescheduling appointment: {formatted_error}", "/api/backend/Appointment")
         logger.error(f"Error rescheduling appointment: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
@@ -286,9 +290,12 @@ async def done_appointment(data: models.done):
         
         await conn.booking.appointment.update_one({"appointment_id": appointment_id}, {"$set": {"status": status}})
         await conn.booking.appointment.delete_one({"appointment_id": appointment_id})
+        create_new_log("info", f"Appointment status updated successfully: {appointment_id}", "/api/backend/Appointment")
         logger.info(f"Appointment status updated successfully: {appointment_id}")
         return {"message": "Appointment status updated successfully", "appointment_id": appointment_id, "status": status}
     except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error updating appointment status: {formatted_error}", "/api/backend/Appointment")
         logger.error(f"Error updating appointment status: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")

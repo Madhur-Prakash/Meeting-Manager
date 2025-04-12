@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from . import models
 from .redis import client
 import traceback
-from .utils import setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment, send_email, send_email_ses
+from .utils import setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment, send_email, send_email_ses, create_new_log
 from .database import conn
 
 patient_book = APIRouter()
@@ -57,6 +57,7 @@ async def book_appointment(data: models.Booking):
             
             # insert in db if no conflict
             updated_form_dict = await insert_in_db(form_dict)   
+            create_new_log("info", f"Appointment booked successfull: {form_dict}", "/api/backend/Appointment")
             logger.info(f"Appointment booked successfull: {form_dict}")
             # Return the first cached appointment
             return {"message": "Appointment booked successfully", "appointment_id": updated_form_dict['appointment_id'], "status": status.HTTP_201_CREATED}
@@ -157,6 +158,7 @@ async def book_appointment(data: models.Booking):
 
         # Insert the new appointment into the database
         updated_form_dict = await insert_in_db(form_dict)
+        create_new_log("info", f"Appointment booked successfull: {updated_form_dict['appointment_id']}", "/api/backend/Appointment")
         logger.info(f"Appointment booked successfull: {updated_form_dict['appointment_id']}")
         
         # Return the new appointment details
@@ -165,6 +167,8 @@ async def book_appointment(data: models.Booking):
     except Exception as e:
         print(f"Error booking appointment: {str(e)}")
         print(traceback.format_exc())
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error booking appointment: {formatted_error}", "/api/backend/Appointment")
         logger.error(f"Error booking appointment: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
 
@@ -301,7 +305,7 @@ async def reschedule(data: models.Reschedule_Appointment):
             if not sent_mail:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 
-
+            create_new_log("info", f"Appointment rescheduled successfully: {form_data['appointment_id']}", "/api/backend/Appointment")
             logger.info(f"Appointment rescheduled successfully: {form_data['appointment_id']}")
             return {"message": "Appointment rescheduled successfully", "appointment_id": form_data['appointment_id'], "status": status.HTTP_200_OK}
 
@@ -389,13 +393,16 @@ async def reschedule(data: models.Reschedule_Appointment):
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 
             new_appointment = await insert_in_db(updated_mongo_doc)
+            create_new_log("info", f"Appointment rescheduled successfully: {new_appointment['appointment_id']}", "/api/backend/Appointment")
             logger.info(f"Appointment rescheduled successfully: {new_appointment['appointment_id']}")
             return {"message": "Appointment rescheduled successfully", "appointment_id": new_appointment['appointment_id'], "status": status.HTTP_200_OK}
     
 #****************************************************************************************************************************************************
     except Exception as e:
-        logger.error(f"Error rescheduling appointment: {str(e)}")
-        print(traceback.format_exc())
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error rescheduling appointment: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error rescheduling appointment: {formatted_error}")
+        print(formatted_error)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
 
 
@@ -408,10 +415,13 @@ async def cancel_appointment(data: models.cancel):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")  
         await conn.booking.appointment.delete_one({"appointment_id": form["appointment_id"]})
         await delete_cached_appointment(appointment)
+        create_new_log("info", f"Appointment cancelled successfully: {form['appointment_id']}", "/api/backend/Appointment")
         logger.info(f"Appointment cancelled successfully: {form['appointment_id']}")
         return {"message": "Appointment cancelled successfully", "appointment_id": form["appointment_id"], "status": status.HTTP_302_FOUND}
     
     except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error cancelling appointment: {formatted_error}", "/api/backend/Appointment")
         logger.error(f"Error cancelling appointment: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
