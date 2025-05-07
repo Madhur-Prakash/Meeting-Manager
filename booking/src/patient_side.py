@@ -1,56 +1,186 @@
-from fastapi import APIRouter, Request, HTTPException, status
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException, status
 from fastapi.templating import Jinja2Templates
-from .redis import client
-from . import models
 from datetime import datetime, timedelta
-from .utils import setup_logging, cache_appointment, delete_cached_appointment, insert_in_db, send_email, send_email_ses, create_new_log
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
+from models import models
 import traceback
-from .database import conn
+from ..helper.utils import setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment, send_email, send_email_ses, create_new_log
+from ..config.database import conn
 
-doctor_book = APIRouter()
+patient_book = APIRouter()
 
 templates = Jinja2Templates(directory="booking/templates")
 
 logger = setup_logging() # initialize logger
 
-@doctor_book.get("/healthz_appoint")
-def health_check():
-    return {"status": "ok"}
 
-@doctor_book.get("/doctor/{CIN}", response_class=HTMLResponse)
-async def get_all(request: Request, CIN: str):
+@patient_book.post("/patient/appointment/book", status_code=status.HTTP_302_FOUND)
+async def book_appointment(data: models.Booking):
     try:
-        appointments =  await conn.booking.appointment.find({"CIN": CIN}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
-        print(appointments) #debugging
-        appo = []
-        for appointment in appointments:
-            appointment_data = {
-                "patient_name": appointment["patient_name"],
-                "appointment_date": appointment["appointment_date"],
-                "appointment_time": appointment["appointment_time"]
-            }
-            appo.append(appointment_data)
-            
-            # Cache the appointment
-            await client.hset(
-                f"appointment:{CIN}:{appointment['_id']}", mapping=appointment_data)
+        form = dict(data)
+        form_dict = dict(form)
         
-        return templates.TemplateResponse("doc.html", {"request": request, "appointments": appo})
-    
+        # Delete all appointments whose status is true
+        await conn.booking.appointment.delete_many({"status": "true"})
+
+        required_fields = ["doctor_name", "CIN", "patient_name", "email", "appointment_date", "appointment_time"]
+        for field in required_fields:
+            if field not in form_dict:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
+        
+        # Check if data is cached
+        cached_data = await get_cached_appointments(form_dict)
+        # Convert appointment time to datetime for comparisons
+        appointment_datetime = datetime.strptime(f"{form_dict['appointment_date']} {form_dict['appointment_time']}", "%Y-%m-%d %H:%M")
+        
+        if cached_data:
+            # Check if doctor exists
+            doctor_appointment = await conn.auth.doctor.find_one({
+            "full_name": form_dict["doctor_name"],
+            "CIN": form_dict["CIN"]})
+            if not doctor_appointment:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found, please choose a different doctor.")
+        
+            # check if user exist
+            user = await conn.auth.patient.find_one({"email": form_dict["email"]})
+            if not user:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+            # compare the cached appointment time with the new appointment time
+            for existing_appt in cached_data:
+                existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}", "%Y-%m-%d %H:%M")
+                
+                # Check if new appointment is within 30 minutes before or after an existing appointment
+                if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=30):
+                    print("Data checked in cache for appointment")
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Appointment slot is too close to an existing appointment. Please choose a different time.")   
+            
+            # insert in db if no conflict
+            updated_form_dict = await insert_in_db(form_dict)   
+            create_new_log("info", f"Appointment booked successfull: {form_dict}", "/api/backend/Appointment")
+            logger.info(f"Appointment booked successfull: {form_dict}")
+            # Return the first cached appointment
+            return {"message": "Appointment booked successfully", "appointment_id": updated_form_dict['appointment_id'], "status": status.HTTP_201_CREATED}
+        
+        print("cache returned None")
+
+        # Check if doctor exists
+        doctor_appointment = await conn.auth.doctor.find_one({
+            "full_name": form_dict["doctor_name"],
+            "CIN": form_dict["CIN"]
+        })
+        if not doctor_appointment:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found, please choose a different doctor.")
+        
+        # check if patient exist
+        user = await conn.auth.patient.find_one({"email": form_dict["email"]})
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        
+        # Convert cursor to list using .to_list()
+        existing_appointments = await conn.booking.appointment.find({
+            "doctor_name": form_dict["doctor_name"],
+            "appointment_date": form_dict["appointment_date"],
+            "CIN": form_dict["CIN"]
+        }).to_list(length=None)
+
+        # print("existing app:", existing_appointments)
+
+        for existing_appt in existing_appointments:
+            existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}", "%Y-%m-%d %H:%M")
+            
+            # Check if new appointment is within 30 minutes before or after an existing appointment
+            if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=30):
+                print("db hit for appointment")
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Appointment slot is too close to an existing appointment. Please choose a different time.")
+
+        html_body = f"""
+                        <html>
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
+    <table width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
+        <tr>
+            <td align="center">
+                <table width="600px" cellspacing="0" cellpadding="0" style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
+                    <tr>
+                        <td align="center">
+                            <h2 style="color: #2C3E50;">Appointment Confirmation</h2>
+                            <p style="color: #555; font-size: 16px;">Dear <strong>{form_dict['patient_name']}</strong>,</p>
+                            <p style="color: #555; font-size: 16px;">Thank you for booking your appointment with <strong>CuraDocs</strong>. Below are your appointment details:</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Doctor:</td>
+                                    <td style="color: #555; font-size: 16px;">Dr. {form_dict['doctor_name']}</td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Date:</td>
+                                    <td style="color: #555; font-size: 16px;">{form_dict['appointment_date']}</td>
+                                </tr>
+                                <tr>
+                                    <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Time:</td>
+                                    <td style="color: #555; font-size: 16px;">{form_dict['appointment_time']}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <p style="color: #555; font-size: 16px;">Please arrive at least <strong> 15 minutes</strong> before your scheduled appointment. 
+                            <p style="color: #555; font-size: 16px;">We look forward to assisting you with your healthcare needs.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding-top: 20px;">
+                            <p style="color: #777; font-size: 14px;">Best regards,</p>
+                            <p style="color: #2C3E50; font-size: 16px; font-weight: bold;">CuraDocs Team</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding-top: 30px; border-top: 1px solid #ddd;">
+                            <p style="color: #888; font-size: 12px;">© 2025 CuraDocs. All rights reserved.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+        """
+        # send a confirmation email to the patient
+        email_sent = send_email(form_dict["email"], "Appointment Confirmation", html_body, retries=3, delay=5)
+        if not email_sent:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")   
+        
+
+        # Insert the new appointment into the database
+        updated_form_dict = await insert_in_db(form_dict)
+        create_new_log("info", f"Appointment booked successfull: {updated_form_dict['appointment_id']}", "/api/backend/Appointment")
+        logger.info(f"Appointment booked successfull: {updated_form_dict['appointment_id']}")
+        
+        # Return the new appointment details
+        return {"message": "Appointment booked successfully", "appointment_id": updated_form_dict['appointment_id'], "status": status.HTTP_201_CREATED}
+
     except Exception as e:
+        print(f"Error booking appointment: {str(e)}")
+        print(traceback.format_exc())
         formatted_error = traceback.format_exc()
-        create_new_log("error", f"Error fetching appointments: {formatted_error}", "/api/backend/Appointment")
-        logger.error(f"Error fetching appointments: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-    
-@doctor_book.post("/doctor/appointment/reschedule", status_code=status.HTTP_302_FOUND)
+        create_new_log("error", f"Error booking appointment: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error booking appointment: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+
+@patient_book.post("/patient/appointment/reschedule", status_code=status.HTTP_302_FOUND)
 async def reschedule(data: models.Reschedule_Appointment):
     try:
         form = dict(data)
         form_data = dict(form)
-
-        # required fields
+        
+        #  required fields
         required_fields = ["appointment_date", "appointment_time", "reason", "appointment_id"]
         for field in required_fields:
             if field not in form_data:
@@ -273,29 +403,28 @@ async def reschedule(data: models.Reschedule_Appointment):
     except Exception as e:
         formatted_error = traceback.format_exc()
         create_new_log("error", f"Error rescheduling appointment: {formatted_error}", "/api/backend/Appointment")
-        logger.error(f"Error rescheduling appointment: {str(e)}")
-        print(traceback.format_exc())
+        logger.error(f"Error rescheduling appointment: {formatted_error}")
+        print(formatted_error)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
-    
-@doctor_book.post("/doctor/appointment/done", status_code=status.HTTP_302_FOUND)
-async def done_appointment(data: models.done):
-    try:
-        form_data = dict(data)
-        appointment_id = form_data['appointment_id']
-        status = form_data["status"]
 
-        existing_appointment = await conn.booking.appointment.find_one({"appointment_id": appointment_id})
-        if not existing_appointment:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
-        
-        await conn.booking.appointment.update_one({"appointment_id": appointment_id}, {"$set": {"status": status}})
-        await conn.booking.appointment.delete_one({"appointment_id": appointment_id})
-        create_new_log("info", f"Appointment status updated successfully: {appointment_id}", "/api/backend/Appointment")
-        logger.info(f"Appointment status updated successfully: {appointment_id}")
-        return {"message": "Appointment status updated successfully", "appointment_id": appointment_id, "status": status}
+
+@patient_book.post("/patient/appointment/cancel", status_code=status.HTTP_302_FOUND)
+async def cancel_appointment(data: models.cancel):
+    try:
+        form = dict(data)
+        appointment = await conn.booking.appointment.find_one({"appointment_id": form["appointment_id"]})
+        if not appointment:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")  
+        await conn.booking.appointment.delete_one({"appointment_id": form["appointment_id"]})
+        await delete_cached_appointment(appointment)
+        create_new_log("info", f"Appointment cancelled successfully: {form['appointment_id']}", "/api/backend/Appointment")
+        logger.info(f"Appointment cancelled successfully: {form['appointment_id']}")
+        return {"message": "Appointment cancelled successfully", "appointment_id": form["appointment_id"], "status": status.HTTP_302_FOUND}
+    
     except Exception as e:
         formatted_error = traceback.format_exc()
-        create_new_log("error", f"Error updating appointment status: {formatted_error}", "/api/backend/Appointment")
-        logger.error(f"Error updating appointment status: {str(e)}")
+        create_new_log("error", f"Error cancelling appointment: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error cancelling appointment: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+

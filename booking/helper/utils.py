@@ -2,7 +2,7 @@ import random
 import string
 import logging
 import os
-from .redis import client
+from ..config.redis import client
 import traceback
 import base64
 import pickle
@@ -15,7 +15,7 @@ from email.mime.text import MIMEText
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from .database import conn
+from ..config.database import conn
 from fastapi import HTTPException, status
 from concurrent_log_handler import ConcurrentRotatingFileHandler
 

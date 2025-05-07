@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from booking.patient_side import patient_book
-from booking.doctor_side import doctor_book
+from booking.src.patient_side import patient_book
+from booking.src.doctor_side import doctor_book
 from fastapi.middleware.cors import CORSMiddleware
 
 app=FastAPI()
