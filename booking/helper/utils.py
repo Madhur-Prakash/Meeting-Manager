@@ -1,7 +1,9 @@
+import json
 import random
 import string
 import logging
 import os
+from booking.models.models import CustomJSONEncoder
 from ..config.redis import client
 import traceback
 import base64
@@ -58,6 +60,7 @@ def setup_logging():
         logger.addHandler(console_handler)
     return logger
 
+logger = setup_logging()
 
 rand_numbers = set()
 
@@ -129,6 +132,36 @@ async def insert_in_db(form: dict):
             # data caching after all the validation are done and appointment is booked
             await cache_appointment(form)
             return (form)
+
+
+async def set_appointment_slot(cin: str, date: str, form: dict):
+    appointment_key = f"appointment_available_slot:{form['date']}:{form['CIN']}"
+    redis_data = {k: json.dumps(v, cls=CustomJSONEncoder) if isinstance(v, (dict, list)) else v 
+                      for k, v in form.items()}
+    await client.hset(appointment_key, mapping=redis_data)
+    await client.expire(appointment_key, 8 * 24 * 60 * 60)  # Cache for 7 days
+    logger.info(f"Appointment slot cached successfully for {cin} on {date}")
+    print("Free appointment slot cached successfully")
+
+
+async def get_appointment_slot(date: str, cin: str):
+    appointment_key = f"appointment_available_slot:{date}:{cin}"
+    cached_data = await client.hgetall(appointment_key)
+    if cached_data:
+        print("Appointment slots fetched from cache")
+        return {
+            "CIN": cached_data["CIN"],
+            "date": cached_data["date"],
+            "avg_appointment_duration":cached_data["avg_appointment_duration"],
+            "working_hours": json.loads(cached_data["working_hours"]),
+            "available_slots": json.loads(cached_data["available_slots"])
+        }
+    else:
+        print("No appointment slots available in cache")
+        return None
+    
+
+
 
 def authenticate_gmail():
     """Authenticate and return Gmail API service."""

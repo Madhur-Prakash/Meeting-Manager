@@ -6,7 +6,8 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from models import models
 import traceback
-from ..helper.utils import setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment, send_email, send_email_ses, create_new_log
+from config.redis import client
+from ..helper.utils import setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment, send_email, send_email_ses, create_new_log, set_appointment_slot, get_appointment_slot
 from ..config.database import conn
 
 patient_book = APIRouter()
@@ -434,3 +435,124 @@ async def cancel_appointment(data: models.cancel):
         print(traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
 
+
+@patient_book.get("/patient/get/available_slots/{CIN}/{date}", status_code=status.HTTP_200_OK)
+async def get_available_slots(CIN: str, date: str):
+    try:
+        # Validate the date format
+        try:
+            selected_date = datetime.strptime(date, "%d-%m-%y")
+            date_str = selected_date.strftime("%d-%m-%y")
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date format. Please use DD-MM-YY")
+        
+        
+        cache_data = await get_appointment_slot(date_str, CIN)
+        if cache_data:
+            print("Cache hit for available slots")
+            logger.info(f"Cache hit for available slots: {CIN} on {date_str}")
+            create_new_log("info", f"Cache hit for available slots: {CIN} on {date_str}", "/api/backend/Appointment")
+            return cache_data
+
+        # Get doctor details
+        print("Cache miss for available slots")
+        doctor = await conn.public_profile_data.doctor.find_one({"CIN": CIN})
+        if not doctor:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
+        
+        # Get doctor's working hours, break times and appointment duration
+        try:
+            avg_appointment_duration = int(doctor['avg_appointment_duration'])  # in minutes
+            working_time = doctor['working_time'][0]  # Get the first element of the working_time array
+            
+            start_time = working_time['start_time']
+            end_time = working_time['end_time']
+            start_break_time = working_time['start_break_time']
+            end_break_time = working_time['end_break_time']
+            
+        except (KeyError, IndexError, ValueError) as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail=f"Invalid doctor schedule configuration: {str(e)}"
+            )
+        
+        # Convert string times to datetime objects for easier manipulation
+        start_datetime = datetime.strptime(f"{date_str} {start_time}", "%d-%m-%y %H:%M")
+        end_datetime = datetime.strptime(f"{date_str} {end_time}", "%d-%m-%y %H:%M")
+        start_break_datetime = datetime.strptime(f"{date_str} {start_break_time}", "%d-%m-%y %H:%M")
+        end_break_datetime = datetime.strptime(f"{date_str} {end_break_time}", "%d-%m-%y %H:%M")
+        
+        # Get all existing appointments for the doctor on the given date
+        appointments = await conn.booking.appointment.find({
+            "CIN": CIN,
+            "appointment_date": date_str
+        }).to_list(length=None)
+        
+        # Extract unavailable time slots
+        unavailable_slots = []
+        for appointment in appointments:
+            appointment_time = appointment['appointment_time']
+            appointment_datetime = datetime.strptime(f"{date_str} {appointment_time}", "%d-%m-%y %H:%M")
+            unavailable_slots.append(appointment_datetime)
+        
+        # Generate all possible time slots based on working hours and appointment duration
+        all_slots = []
+        
+        # First part of the day (before break)
+        current_slot = start_datetime
+        while current_slot + timedelta(minutes=avg_appointment_duration) <= start_break_datetime:
+            all_slots.append(current_slot)
+            current_slot = current_slot + timedelta(minutes=avg_appointment_duration)
+        
+        # Second part of the day (after break)
+        current_slot = end_break_datetime
+        while current_slot + timedelta(minutes=avg_appointment_duration) <= end_datetime:
+            all_slots.append(current_slot)
+            current_slot = current_slot + timedelta(minutes=avg_appointment_duration)
+        
+        # Filter out unavailable slots
+        available_slots = []
+        for slot in all_slots:
+            if slot not in unavailable_slots:
+                available_slots.append(slot.strftime("%H:%M"))
+
+        available_dict = {
+            "CIN": CIN,
+            "date": date_str,
+            "working_hours": {
+                "start_time": start_time,
+                "end_time": end_time,
+                "break_time": {
+                    "start": start_break_time,
+                    "end": end_break_time
+                }
+            },
+            "avg_appointment_duration": avg_appointment_duration,
+            "available_slots": available_slots
+        }
+        
+        await set_appointment_slot(CIN, date_str, available_dict)
+
+
+        return available_dict
+    
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error fetching available slots: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error fetching available slots: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+    
+@patient_book.get("/refresh/available_slots/{CIN}/{date}", status_code=status.HTTP_200_OK)
+async def refresh_available_slots(CIN: str, date: str):
+    try:
+        await client.delete(f"appointment_available_slot:{date}:{CIN}")
+        logger.info(f"Cache cleared for available slots: {CIN} on {date}")
+        create_new_log("info", f"Cache cleared for available slots: {CIN} on {date}", "/api/backend/Appointment")
+        return {"message": "Cache cleared successfully", "status": status.HTTP_200_OK}
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error refreshing available slots: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error refreshing available slots: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")

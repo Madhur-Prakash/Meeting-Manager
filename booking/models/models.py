@@ -1,3 +1,4 @@
+import json
 from pydantic import BaseModel
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
@@ -39,3 +40,11 @@ class res(BaseModel):
     appointment_id: Optional[str]
     CIN: Optional[str]
     status: bool
+
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, 'model_dump'):
+            return obj.model_dump()  # For Pydantic v2
+        elif hasattr(obj, 'dict'):
+            return obj.dict()  # For older Pydantic versions
+        return super().default(obj)
