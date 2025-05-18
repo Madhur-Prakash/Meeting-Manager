@@ -4,7 +4,7 @@ import string
 import logging
 import os
 from booking.models.models import CustomJSONEncoder
-from ..config.redis import client
+from ..config.redis_config import client
 import traceback
 import base64
 import pickle

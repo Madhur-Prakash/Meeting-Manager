@@ -6,7 +6,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from models import models
 import traceback
-from config.redis import client
+from booking.config.redis_config import client
 from ..helper.utils import setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment, send_email, send_email_ses, create_new_log, set_appointment_slot, get_appointment_slot
 from ..config.database import conn
 

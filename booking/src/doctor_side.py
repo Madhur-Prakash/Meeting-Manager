@@ -3,7 +3,7 @@ import sys
 from fastapi import APIRouter, Request, HTTPException, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from ..config.redis import client
+from ..config.redis_config import client
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from models import models
 from datetime import datetime, timedelta
