@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
 
 class Booking(BaseModel):
@@ -11,6 +11,7 @@ class Booking(BaseModel):
     CIN: str = Field(..., title = "CIN of doctor")
 
 class Reschedule_Appointment(BaseModel):
+    CIN: str = Field(..., title = "CIN of doctor")
     appointment_date: str = Field(..., title = "Appointment date")
     appointment_time: str = Field(..., title = "Appointment time")
     reason: str = Field(..., title = "Reason for rescheduling")
@@ -20,8 +21,7 @@ class cancel(BaseModel):
     appointment_id: str = Field(..., title = "Appointment ID")
 
 class done(BaseModel):
-    appointment_id: str = Field(..., title = "Appointment ID")
-    status: str = Field(..., title="Status of appointment")
+    appointment_id: List[str] = Field(..., title = "Appointment ID")
 
 class Doctor(BaseModel):
     full_name: str = Field(None, title="Full Name of the User")

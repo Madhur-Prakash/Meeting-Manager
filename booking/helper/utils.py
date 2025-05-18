@@ -27,7 +27,7 @@ NO_REPLY_EMAIL = os.getenv("NO_REPLY_EMAIL")
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 def setup_logging():
-    logger = logging.getLogger("auth_log") # create logger
+    logger = logging.getLogger("appointment_log") # create logger
     if not logger.hasHandlers(): # check if handlers already exist
         logger.setLevel(logging.INFO) # set log level
 
@@ -37,7 +37,7 @@ def setup_logging():
 
         # create a file handler
         file_handler = ConcurrentRotatingFileHandler(
-            os.path.join(log_dir, "auth.log"), 
+            os.path.join(log_dir, "appointment.log"), 
             maxBytes=10000, # 10KB 
             backupCount=500
         )
@@ -71,7 +71,7 @@ def  random_number():
         return random_number()
 
 async def cache_appointment(data: dict):
-    appointment_key = f"appointment:{data['appointment_date']}:{data['CIN']}:{data['appointment_time']}"
+    appointment_key = f"appointment:{data['appointment_date']}:{data['CIN']}:{data['appointment_id']}"
     await client.hset(appointment_key, mapping={
         "doctor_name": data['doctor_name'],
         "patient_name": data['patient_name'],
@@ -99,7 +99,7 @@ async def get_cached_appointments(data: dict):
     return None
 
 async def delete_cached_appointment(data: dict):
-    keys = await client.keys(f"appointment:{data['appointment_date']}:{data['CIN']}:{data['appointment_time']}")
+    keys = await client.keys(f"appointment:{data['appointment_date']}:{data['CIN']}:{data['appointment_id']}")
     for key in keys:
         await client.delete(key)
     print("Appointment deleted from cache")

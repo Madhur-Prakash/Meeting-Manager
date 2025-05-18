@@ -22,18 +22,20 @@ async def book_appointment(data: models.Booking):
         form = dict(data)
         form_dict = dict(form)
         
-        # Delete all appointments whose status is true
-        await conn.booking.appointment.delete_many({"status": "true"})
 
         required_fields = ["doctor_name", "CIN", "patient_name", "email", "appointment_date", "appointment_time"]
         for field in required_fields:
             if field not in form_dict:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
         
+        doctor = await conn.public_profile_data.doctor.find_one({"CIN": form_dict["CIN"]})
+        if not doctor:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found, please choose a different doctor.")
+
         # Check if data is cached
         cached_data = await get_cached_appointments(form_dict)
         # Convert appointment time to datetime for comparisons
-        appointment_datetime = datetime.strptime(f"{form_dict['appointment_date']} {form_dict['appointment_time']}", "%Y-%m-%d %H:%M")
+        appointment_datetime = datetime.strptime(f"{form_dict['appointment_date']} {form_dict['appointment_time']}", "%d-%m-%y %H:%M")
         
         if cached_data:
             # Check if doctor exists
@@ -50,10 +52,10 @@ async def book_appointment(data: models.Booking):
         
             # compare the cached appointment time with the new appointment time
             for existing_appt in cached_data:
-                existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}", "%Y-%m-%d %H:%M")
+                existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}",  "%d-%m-%y %H:%M")
                 
                 # Check if new appointment is within 30 minutes before or after an existing appointment
-                if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=30):
+                if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=int(doctor['avg_appointment_duration'])):
                     print("Data checked in cache for appointment")
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Appointment slot is too close to an existing appointment. Please choose a different time.")   
             
@@ -89,10 +91,10 @@ async def book_appointment(data: models.Booking):
         # print("existing app:", existing_appointments)
 
         for existing_appt in existing_appointments:
-            existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}", "%Y-%m-%d %H:%M")
+            existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}",  "%d-%m-%y %H:%M")
             
             # Check if new appointment is within 30 minutes before or after an existing appointment
-            if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=30):
+            if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=int(doctor['avg_appointment_duration'])):
                 print("db hit for appointment")
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Appointment slot is too close to an existing appointment. Please choose a different time.")
 
@@ -181,16 +183,20 @@ async def reschedule(data: models.Reschedule_Appointment):
         form_data = dict(form)
         
         #  required fields
-        required_fields = ["appointment_date", "appointment_time", "reason", "appointment_id"]
+        required_fields = ["appointment_date", "appointment_time", "reason", "appointment_id", "CIN"]
         for field in required_fields:
             if field not in form_data:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
-            
+
+        doctor = await conn.booking.appointment.find_one({"CIN": form_data["CIN"]})
+        if not doctor:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found, please choose a different doctor.")
+
         new_appointment_date = form_data["appointment_date"]
         new_appointment_time = form_data["appointment_time"]
         reason = form_data["reason"]
 
-        new_appointment_datetime = datetime.strptime(f"{new_appointment_date} {new_appointment_time}", "%Y-%m-%d %H:%M")
+        new_appointment_datetime = datetime.strptime(f"{new_appointment_date} {new_appointment_time}",  "%d-%m-%y %H:%M")
         
         # Check if the new appointment date is in the past
         # if new_appointment_datetime < datetime.now().isoformat():
@@ -207,10 +213,10 @@ async def reschedule(data: models.Reschedule_Appointment):
             "appointment_date": new_appointment_date}).to_list(length=None)
         print("existing_appointment_time", existing_appointment_time)
         for existing_appo_time in existing_appointment_time:
-            existing_time = datetime.strptime(f"{existing_appo_time['appointment_date']} {existing_appo_time['appointment_time']}", "%Y-%m-%d %H:%M")
+            existing_time = datetime.strptime(f"{existing_appo_time['appointment_date']} {existing_appo_time['appointment_time']}", "%d-%m-%y %H:%M")
 
             # Check if new appointment is within 30 minutes before or after an existing appointment
-            if abs(existing_time - new_appointment_datetime) < timedelta(minutes=30):
+            if abs(existing_time - new_appointment_datetime) < timedelta(minutes=int(doctor['avg_appointment_duration'])):
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Appointment slot is too close to an existing appointment. Please choose a different time.")
             
 #  ************************************fixing the number_of_appointments fiels in the database****************************************

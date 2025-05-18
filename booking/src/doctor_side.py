@@ -54,16 +54,21 @@ async def reschedule(data: models.Reschedule_Appointment):
         form_data = dict(form)
 
         # required fields
-        required_fields = ["appointment_date", "appointment_time", "reason", "appointment_id"]
+        required_fields = ["appointment_date", "appointment_time", "reason", "appointment_id", "CIN"]
         for field in required_fields:
             if field not in form_data:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
-            
+        
+        doctor = await conn.public_profile_data.doctor.find_one({"CIN": form_data["CIN"]})
+        if not doctor:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
+
+
         new_appointment_date = form_data["appointment_date"]
         new_appointment_time = form_data["appointment_time"]
         reason = form_data["reason"]
 
-        new_appointment_datetime = datetime.strptime(f"{new_appointment_date} {new_appointment_time}", "%Y-%m-%d %H:%M")
+        new_appointment_datetime = datetime.strptime(f"{new_appointment_date} {new_appointment_time}", "%d-%m-%y %H:%M")
         
         # Check if the new appointment date is in the past
         # if new_appointment_datetime < datetime.now().isoformat():
@@ -80,10 +85,10 @@ async def reschedule(data: models.Reschedule_Appointment):
             "appointment_date": new_appointment_date}).to_list(length=None)
         print("existing_appointment_time", existing_appointment_time)
         for existing_appo_time in existing_appointment_time:
-            existing_time = datetime.strptime(f"{existing_appo_time['appointment_date']} {existing_appo_time['appointment_time']}", "%Y-%m-%d %H:%M")
+            existing_time = datetime.strptime(f"{existing_appo_time['appointment_date']} {existing_appo_time['appointment_time']}", "%d-%m-%y %H:%M")
 
             # Check if new appointment is within 30 minutes before or after an existing appointment
-            if abs(existing_time - new_appointment_datetime) < timedelta(minutes=30):
+            if abs(existing_time - new_appointment_datetime) < timedelta(minutes=int(doctor['avg_appointment_duration'])):
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Appointment slot is too close to an existing appointment. Please choose a different time.")
             
 #  ************************************fixing the number_of_appointments fiels in the database****************************************
@@ -285,17 +290,20 @@ async def done_appointment(data: models.done):
     try:
         form_data = dict(data)
         appointment_id = form_data['appointment_id']
-        appointment_status = form_data["status"]
-
-        existing_appointment = await conn.booking.appointment.find_one({"appointment_id": appointment_id})
-        if not existing_appointment:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+        if not appointment_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Appointment ID is required")
         
-        await conn.booking.appointment.update_one({"appointment_id": appointment_id}, {"$set": {"status": appointment_status}})
-        await conn.booking.appointment.delete_one({"appointment_id": appointment_id})
-        create_new_log("info", f"Appointment status updated successfully: {appointment_id}", "/api/backend/Appointment")
-        logger.info(f"Appointment status updated successfully: {appointment_id}")
-        return {"message": "Appointment status updated successfully", "appointment_id": appointment_id, "status": appointment_status}
+        # await conn.booking.appointment.update_one({"appointment_id": appointment_id}, {"$set": {"status": appointment_status}})
+        for appointment in appointment_id:
+            existing_appointment = await conn.booking.appointment.find_one({"appointment_id": appointment})
+            if not existing_appointment:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+            await conn.booking.temp_appointment.insert_one(existing_appointment)
+            await conn.booking.appointment.delete_one({"appointment_id": appointment})
+            await delete_cached_appointment(existing_appointment)
+            create_new_log("info", f"Appointment status updated successfully: {appointment_id}", "/api/backend/Appointment")
+            logger.info(f"Appointment status updated successfully: {appointment_id}")
+        return {"message": "Appointment status updated successfully", "appointment_id": appointment_id}
     except Exception as e:
         formatted_error = traceback.format_exc()
         create_new_log("error", f"Error updating appointment status: {formatted_error}", "/api/backend/Appointment")
