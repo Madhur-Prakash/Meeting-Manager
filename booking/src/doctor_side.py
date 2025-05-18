@@ -21,11 +21,22 @@ logger = setup_logging() # initialize logger
 def health_check():
     return {"status": "ok"}
 
-@doctor_book.get("/doctor/{CIN}", response_class=HTMLResponse)
-async def get_all(request: Request, CIN: str):
+@doctor_book.get("/doctor/appointment/{CIN}", status_code=status.HTTP_200_OK)
+async def get_all(CIN: str):
     try:
         appointments =  await conn.booking.appointment.find({"CIN": CIN}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
         print(appointments) #debugging
+        cache_keys = await client.keys(f"appointment:{CIN}:*")
+        if cache_keys:
+            print("Cache data found")
+            cached_appointments = []
+            for key in cache_keys:
+                appointment_data = await client.hgetall(key)
+                if appointment_data:
+                    cached_appointments.append(appointment_data)
+            return cached_appointments
+        
+        print("No cache data found") #debugging
         appo = []
         for appointment in appointments:
             appointment_data = {
@@ -39,7 +50,7 @@ async def get_all(request: Request, CIN: str):
             await client.hset(
                 f"appointment:{CIN}:{appointment['_id']}", mapping=appointment_data)
         
-        return templates.TemplateResponse("doc.html", {"request": request, "appointments": appo})
+        return appo
     
     except Exception as e:
         formatted_error = traceback.format_exc()
@@ -47,6 +58,23 @@ async def get_all(request: Request, CIN: str):
         logger.error(f"Error fetching appointments: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
+@doctor_book.get("/doctor/{CIN}/delete_cached_appointments", status_code=status.HTTP_200_OK)
+async def delete_cached_appointments(CIN: str):
+    try:
+        cache_keys = await client.keys(f"appointment:{CIN}:*")
+        if cache_keys:
+            await client.delete(*cache_keys)
+            create_new_log("info", f"Deleted cached appointments for CIN {CIN}", "/api/backend/Appointment")
+            logger.info(f"Deleted cached appointments for CIN {CIN}")
+            return {"message": f"Deleted {len(cache_keys)} cached appointments for CIN {CIN}"}
+        else:
+            return {"message": f"No cached appointments found for CIN {CIN}"}
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error deleting cached appointments: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error deleting cached appointments: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 @doctor_book.post("/doctor/appointment/reschedule", status_code=status.HTTP_302_FOUND)
 async def reschedule(data: models.Reschedule_Appointment):
     try:

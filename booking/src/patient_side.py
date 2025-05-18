@@ -17,6 +17,63 @@ templates = Jinja2Templates(directory="booking/templates")
 logger = setup_logging() # initialize logger
 
 
+@patient_book.get("/patient/appointment/{email}", status_code=status.HTTP_200_OK)
+async def get_all(email: str):
+    try:
+        appointments =  await conn.booking.appointment.find({"email": email}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
+        print(appointments) #debugging
+        cache_keys = await client.keys(f"appointment:{email}:*")
+        if cache_keys:
+            print("Cache data found")
+            cached_appointments = []
+            for key in cache_keys:
+                appointment_data = await client.hgetall(key)
+                if appointment_data:
+                    cached_appointments.append(appointment_data)
+            return cached_appointments
+        
+        print("No cache data found") #debugging
+        appo = []
+        for appointment in appointments:
+            appointment_data = {
+                "doctor_name": appointment["doctor_name"],
+                "appointment_date": appointment["appointment_date"],
+                "appointment_time": appointment["appointment_time"]
+            }
+            appo.append(appointment_data)
+            
+            # Cache the appointment
+            await client.hset(
+                f"appointment:{email}:{appointment['_id']}", mapping=appointment_data)
+        
+        return appo
+    
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error fetching appointments: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error fetching appointments: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+
+
+@patient_book.get("/patient/{email}/delete_cached_appointments", status_code=status.HTTP_200_OK)
+async def delete_cached_appointments(email: str):
+    try:
+        cache_keys = await client.keys(f"appointment:{email}:*")
+        if cache_keys:
+            await client.delete(*cache_keys)
+            create_new_log("info", f"Deleted cached appointments for CIN {email}", "/api/backend/Appointment")
+            logger.info(f"Deleted cached appointments for CIN {email}")
+            return {"message": f"Deleted {len(cache_keys)} cached appointments for CIN {email}"}
+        else:
+            return {"message": f"No cached appointments found for CIN {email}"}
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error deleting cached appointments: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error deleting cached appointments: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
 @patient_book.post("/patient/appointment/book", status_code=status.HTTP_302_FOUND)
 async def book_appointment(data: models.Booking):
     try:
