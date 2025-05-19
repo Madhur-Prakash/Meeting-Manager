@@ -93,7 +93,7 @@ async def book_appointment(data: models.Booking):
         # Check if data is cached
         cached_data = await get_cached_appointments(form_dict)
         # Convert appointment time to datetime for comparisons
-        appointment_datetime = datetime.strptime(f"{form_dict['appointment_date']} {form_dict['appointment_time']}", "%d-%m-%y %H:%M")
+        appointment_datetime = datetime.strptime(f"{form_dict['appointment_date']} {form_dict['appointment_time']}", "%d-%m-%Y %H:%M")
         
         if cached_data:
             # Check if doctor exists
@@ -110,7 +110,7 @@ async def book_appointment(data: models.Booking):
         
             # compare the cached appointment time with the new appointment time
             for existing_appt in cached_data:
-                existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}",  "%d-%m-%y %H:%M")
+                existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}",  "%d-%m-%Y %H:%M")
                 
                 # Check if new appointment is within 30 minutes before or after an existing appointment
                 if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=int(doctor['avg_appointment_duration'])):
@@ -149,7 +149,7 @@ async def book_appointment(data: models.Booking):
         # print("existing app:", existing_appointments)
 
         for existing_appt in existing_appointments:
-            existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}",  "%d-%m-%y %H:%M")
+            existing_appt_datetime = datetime.strptime(f"{existing_appt['appointment_date']} {existing_appt['appointment_time']}",  "%d-%m-%Y %H:%M")
             
             # Check if new appointment is within 30 minutes before or after an existing appointment
             if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=int(doctor['avg_appointment_duration'])):
@@ -254,7 +254,7 @@ async def reschedule(data: models.Reschedule_Appointment):
         new_appointment_time = form_data["appointment_time"]
         reason = form_data["reason"]
 
-        new_appointment_datetime = datetime.strptime(f"{new_appointment_date} {new_appointment_time}",  "%d-%m-%y %H:%M")
+        new_appointment_datetime = datetime.strptime(f"{new_appointment_date} {new_appointment_time}",  "%d-%m-%Y %H:%M")
         
         # Check if the new appointment date is in the past
         # if new_appointment_datetime < datetime.now().isoformat():
@@ -271,7 +271,7 @@ async def reschedule(data: models.Reschedule_Appointment):
             "appointment_date": new_appointment_date}).to_list(length=None)
         print("existing_appointment_time", existing_appointment_time)
         for existing_appo_time in existing_appointment_time:
-            existing_time = datetime.strptime(f"{existing_appo_time['appointment_date']} {existing_appo_time['appointment_time']}", "%d-%m-%y %H:%M")
+            existing_time = datetime.strptime(f"{existing_appo_time['appointment_date']} {existing_appo_time['appointment_time']}", "%d-%m-%Y %H:%M")
 
             # Check if new appointment is within 30 minutes before or after an existing appointment
             if abs(existing_time - new_appointment_datetime) < timedelta(minutes=int(doctor['avg_appointment_duration'])):
@@ -498,46 +498,75 @@ async def get_available_slots(CIN: str, date: str):
     try:
         # Validate the date format
         try:
-            selected_date = datetime.strptime(date, "%d-%m-%y")
-            date_str = selected_date.strftime("%d-%m-%y")
+            selected_date = datetime.strptime(date, "%d-%m-%Y")
+            date_str = selected_date.strftime("%d-%m-%Y")
+            day_name = selected_date.strftime("%A").lower()  # Get day name in lowercase
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date format. Please use DD-MM-YY")
         
-        
+        # Check cache first
         cache_data = await get_appointment_slot(date_str, CIN)
         if cache_data:
-            print("Cache hit for available slots")
             logger.info(f"Cache hit for available slots: {CIN} on {date_str}")
             create_new_log("info", f"Cache hit for available slots: {CIN} on {date_str}", "/api/backend/Appointment")
             return cache_data
 
         # Get doctor details
-        print("Cache miss for available slots")
+        logger.info(f"Cache miss for available slots: {CIN} on {date_str}")
         doctor = await conn.public_profile_data.doctor.find_one({"CIN": CIN})
         if not doctor:
+            logger.error(f"Doctor not found with CIN: {CIN}")
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
         
-        # Get doctor's working hours, break times and appointment duration
+        # Get doctor's working time configuration
         try:
             avg_appointment_duration = int(doctor['avg_appointment_duration'])  # in minutes
+            
+            if 'working_time' not in doctor or not doctor['working_time']:
+                raise KeyError("Working time not configured for doctor")
+                
             working_time = doctor['working_time'][0]  # Get the first element of the working_time array
             
+            # Extract working days and holidays
+            working_days = [day.lower() for day in working_time.get('working_days', [])]
+            holidays = [day.lower() for day in working_time.get('holidays', [])]
+            
+            # Check if the selected date is on a holiday
+            if day_name in holidays:
+                return {
+                    "CIN": CIN,
+                    "date": date_str,
+                    "message": f"Doctor is not available on {day_name.capitalize()}s as it's marked as a holiday",
+                    "available_slots": []
+                }
+            
+            # Check if the selected date is a working day
+            if working_days and day_name not in working_days:
+                return {
+                    "CIN": CIN,
+                    "date": date_str,
+                    "message": f"Doctor is not available on {day_name.capitalize()}s. Working days are: {', '.join(d.capitalize() for d in working_days)}",
+                    "available_slots": []
+                }
+            
+            # Extract time information
             start_time = working_time['start_time']
             end_time = working_time['end_time']
             start_break_time = working_time['start_break_time']
             end_break_time = working_time['end_break_time']
             
         except (KeyError, IndexError, ValueError) as e:
+            logger.error(f"Invalid doctor schedule configuration: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
                 detail=f"Invalid doctor schedule configuration: {str(e)}"
             )
         
         # Convert string times to datetime objects for easier manipulation
-        start_datetime = datetime.strptime(f"{date_str} {start_time}", "%d-%m-%y %H:%M")
-        end_datetime = datetime.strptime(f"{date_str} {end_time}", "%d-%m-%y %H:%M")
-        start_break_datetime = datetime.strptime(f"{date_str} {start_break_time}", "%d-%m-%y %H:%M")
-        end_break_datetime = datetime.strptime(f"{date_str} {end_break_time}", "%d-%m-%y %H:%M")
+        start_datetime = datetime.strptime(f"{date_str} {start_time}", "%d-%m-%Y %H:%M")
+        end_datetime = datetime.strptime(f"{date_str} {end_time}", "%d-%m-%Y %H:%M")
+        start_break_datetime = datetime.strptime(f"{date_str} {start_break_time}", "%d-%m-%Y %H:%M")
+        end_break_datetime = datetime.strptime(f"{date_str} {end_break_time}", "%d-%m-%Y %H:%M")
         
         # Get all existing appointments for the doctor on the given date
         appointments = await conn.booking.appointment.find({
@@ -549,7 +578,7 @@ async def get_available_slots(CIN: str, date: str):
         unavailable_slots = []
         for appointment in appointments:
             appointment_time = appointment['appointment_time']
-            appointment_datetime = datetime.strptime(f"{date_str} {appointment_time}", "%d-%m-%y %H:%M")
+            appointment_datetime = datetime.strptime(f"{date_str} {appointment_time}", "%d-%m-%Y %H:%M")
             unavailable_slots.append(appointment_datetime)
         
         # Generate all possible time slots based on working hours and appointment duration
@@ -573,6 +602,7 @@ async def get_available_slots(CIN: str, date: str):
             if slot not in unavailable_slots:
                 available_slots.append(slot.strftime("%H:%M"))
 
+        # Create response
         available_dict = {
             "CIN": CIN,
             "date": date_str,
@@ -584,12 +614,14 @@ async def get_available_slots(CIN: str, date: str):
                     "end": end_break_time
                 }
             },
+            "working_days": [day.capitalize() for day in working_days] if working_days else [],
+            "holidays": [day.capitalize() for day in holidays] if holidays else [],
             "avg_appointment_duration": avg_appointment_duration,
             "available_slots": available_slots
         }
         
+        # Cache the result
         await set_appointment_slot(CIN, date_str, available_dict)
-
 
         return available_dict
     
@@ -597,9 +629,9 @@ async def get_available_slots(CIN: str, date: str):
         formatted_error = traceback.format_exc()
         create_new_log("error", f"Error fetching available slots: {formatted_error}", "/api/backend/Appointment")
         logger.error(f"Error fetching available slots: {str(e)}")
-        print(traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
     
+        
 @patient_book.get("/refresh/available_slots/{CIN}/{date}", status_code=status.HTTP_200_OK)
 async def refresh_available_slots(CIN: str, date: str):
     try:
