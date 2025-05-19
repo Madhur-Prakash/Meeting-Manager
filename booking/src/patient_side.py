@@ -721,13 +721,25 @@ async def patient_get_previous_appoitment(email: str):
 @patient_book.get("/patient/refresh/previous_appointments/{email}", status_code=status.HTTP_200_OK)
 async def refresh_previous_appointments(email: str):
     try:
-        await client.delete(f"previous_appointment:{email}:*")
-        logger.info(f"Cache cleared for previous appointments: {email}")
-        create_new_log("info", f"Cache cleared for previous appointments: {email}", "/api/backend/Appointment")
-        return {"message": "Cache cleared successfully", "status": status.HTTP_200_OK}
+        # Get all keys that match the pattern
+        cache_keys = await client.keys(f"previous_appointment:{email}:*")
+        
+        if cache_keys:
+            await client.delete(*cache_keys)  # Unpack and delete all matching keys
+            create_new_log("info", f"Deleted cached previous appointments for email {email}", "/api/backend/Appointment")
+            logger.info(f"Deleted {len(cache_keys)} cached previous appointments for email {email}")
+            return {
+                "message": f"Deleted {len(cache_keys)} cached previous appointments for email {email}",
+                "status_code": status.HTTP_200_OK
+            }
+        else:
+            return {
+                "message": f"No cached previous appointments found for email {email}",
+                "status_code": status.HTTP_404_NOT_FOUND
+            }
+
     except Exception as e:
         formatted_error = traceback.format_exc()
-        create_new_log("error", f"Error refreshing previous appointments: {formatted_error}", "/api/backend/Appointment")
-        logger.error(f"Error refreshing previous appointments: {str(e)}")
-        print(traceback.format_exc())
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+        create_new_log("error", f"Error deleting cached previous appointments: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error deleting cached previous appointments: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
