@@ -24,8 +24,6 @@ def health_check():
 @doctor_book.get("/doctor/appointment/{CIN}", status_code=status.HTTP_200_OK)
 async def get_all(CIN: str):
     try:
-        appointments =  await conn.booking.appointment.find({"CIN": CIN}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
-        print(appointments) #debugging
         cache_keys = await client.keys(f"appointment:{CIN}:*")
         if cache_keys:
             print("Cache data found")
@@ -37,6 +35,8 @@ async def get_all(CIN: str):
             return cached_appointments
         
         print("No cache data found") #debugging
+        appointments =  await conn.booking.appointment.find({"CIN": CIN}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
+        print(appointments) #debugging
         appo = []
         for appointment in appointments:
             appointment_data = {
@@ -344,8 +344,6 @@ async def done_appointment(data: models.done):
 @doctor_book.get("/doctor/previous_appointment/{CIN}", status_code=status.HTTP_200_OK)
 async def doctor_get_previous_appointment(CIN: str):
     try:
-        appointments =  await conn.booking.temp_appointment.find({"CIN": CIN}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
-        print(appointments) #debugging
         cache_keys = await client.keys(f"appointment:{CIN}:*")
         if cache_keys:
             print("Cache data found")
@@ -357,6 +355,8 @@ async def doctor_get_previous_appointment(CIN: str):
             return cached_appointments
         
         print("No cache data found") #debugging
+        appointments =  await conn.booking.temp_appointment.find({"CIN": CIN}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
+        print(appointments) #debugging
         appo = []
         for appointment in appointments:
             appointment_data = {

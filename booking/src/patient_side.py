@@ -20,8 +20,6 @@ logger = setup_logging() # initialize logger
 @patient_book.get("/patient/appointment/{email}", status_code=status.HTTP_200_OK)
 async def get_all(email: str):
     try:
-        appointments =  await conn.booking.appointment.find({"email": email}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
-        print(appointments) #debugging
         cache_keys = await client.keys(f"appointment:{email}:*")
         if cache_keys:
             print("Cache data found")
@@ -33,6 +31,8 @@ async def get_all(email: str):
             return cached_appointments
         
         print("No cache data found") #debugging
+        appointments =  await conn.booking.appointment.find({"email": email}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
+        print(appointments) #debugging
         appo = []
         for appointment in appointments:
             appointment_data = {
@@ -683,8 +683,6 @@ async def refresh_available_slots(CIN: str, date: str):
 @patient_book.get("/patient/previous_appointments/{email}", status_code=status.HTTP_200_OK)
 async def patient_get_previous_appoitment(email: str):
     try:
-        appointments =  await conn.booking.temp_appointment.find({"email": email}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
-        print(appointments) #debugging
         cache_keys = await client.keys(f"appointment:{email}:*")
         if cache_keys:
             print("Cache data found")
@@ -696,6 +694,8 @@ async def patient_get_previous_appoitment(email: str):
             return cached_appointments
         
         print("No cache data found") #debugging
+        appointments =  await conn.booking.temp_appointment.find({"email": email}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
+        print(appointments) #debugging
         appo = []
         for appointment in appointments:
             appointment_data = {
