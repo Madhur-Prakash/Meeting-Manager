@@ -338,3 +338,58 @@ async def done_appointment(data: models.done):
         logger.error(f"Error updating appointment status: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+    
+
+
+@doctor_book.get("/doctor/previous_appointment/{CIN}", status_code=status.HTTP_200_OK)
+async def doctor_get_previous_appointment(CIN: str):
+    try:
+        appointments =  await conn.booking.temp_appointment.find({"CIN": CIN}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
+        print(appointments) #debugging
+        cache_keys = await client.keys(f"appointment:{CIN}:*")
+        if cache_keys:
+            print("Cache data found")
+            cached_appointments = []
+            for key in cache_keys:
+                appointment_data = await client.hgetall(key)
+                if appointment_data:
+                    cached_appointments.append(appointment_data)
+            return cached_appointments
+        
+        print("No cache data found") #debugging
+        appo = []
+        for appointment in appointments:
+            appointment_data = {
+                "patient_name": appointment["patient_name"],
+                "appointment_date": appointment["appointment_date"],
+                "appointment_time": appointment["appointment_time"]
+            }
+            appo.append(appointment_data)
+            
+            # Cache the appointment
+            await client.hset(f"previous_appointment:{CIN}:{appointment['_id']}", mapping=appointment_data)
+            await client.expire(f"previous_appointment:{CIN}:{appointment['_id']}", 60 * 60 * 24 * 7)
+        return appo
+    
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error fetching appointments: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error fetching appointments: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    
+@doctor_book.get("/doctor/refresh_previous_appointment/{CIN}", status_code=status.HTTP_200_OK)
+async def doctor_refresh_previous_appointment(CIN: str):
+    try:
+        cache_keys = await client.keys(f"previous_appointment:{CIN}:*")
+        if cache_keys:
+            await client.delete(*cache_keys)
+            create_new_log("info", f"Deleted cached previous appointments for CIN {CIN}", "/api/backend/Appointment")
+            logger.info(f"Deleted cached previous appointments for CIN {CIN}")
+            return {"message": f"Deleted {len(cache_keys)} cached previous appointments for CIN {CIN}", "status_code": status.HTTP_200_OK}
+        else:
+            return {"message": f"No cached previous appointments found for CIN {CIN}", "status_code": status.HTTP_404_NOT_FOUND}
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error deleting cached previous appointments: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error deleting cached previous appointments: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

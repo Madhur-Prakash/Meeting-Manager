@@ -679,3 +679,55 @@ async def refresh_available_slots(CIN: str, date: str):
         logger.error(f"Error refreshing available slots: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+
+@patient_book.get("/patient/previous_appointments/{email}", status_code=status.HTTP_200_OK)
+async def patient_get_previous_appoitment(email: str):
+    try:
+        appointments =  await conn.booking.temp_appointment.find({"email": email}).sort([("appointment_date", 1), ("appointment_time", 1)]).to_list(length=None)
+        print(appointments) #debugging
+        cache_keys = await client.keys(f"appointment:{email}:*")
+        if cache_keys:
+            print("Cache data found")
+            cached_appointments = []
+            for key in cache_keys:
+                appointment_data = await client.hgetall(key)
+                if appointment_data:
+                    cached_appointments.append(appointment_data)
+            return cached_appointments
+        
+        print("No cache data found") #debugging
+        appo = []
+        for appointment in appointments:
+            appointment_data = {
+                "doctor_name": appointment["doctor_name"],
+                "appointment_date": appointment["appointment_date"],
+                "appointment_time": appointment["appointment_time"]
+            }
+            appo.append(appointment_data)
+            
+            # Cache the appointment
+            await client.hset(f"previous_appointment:{email}:{appointment['_id']}", mapping=appointment_data)
+            await client.expire(f"previous_appointment:{email}:{appointment['_id']}", 3600)
+        return appo
+    
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error fetching appointments: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error fetching appointments: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+    
+
+@patient_book.get("/patient/refresh/previous_appointments/{email}", status_code=status.HTTP_200_OK)
+async def refresh_previous_appointments(email: str):
+    try:
+        await client.delete(f"previous_appointment:{email}:*")
+        logger.info(f"Cache cleared for previous appointments: {email}")
+        create_new_log("info", f"Cache cleared for previous appointments: {email}", "/api/backend/Appointment")
+        return {"message": "Cache cleared successfully", "status": status.HTTP_200_OK}
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error refreshing previous appointments: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error refreshing previous appointments: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
