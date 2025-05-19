@@ -517,15 +517,19 @@ async def get_available_slots(CIN: str, date: str):
         if not doctor:
             logger.error(f"Doctor not found with CIN: {CIN}")
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
-        # print(doctor['work_address']) #debugging
+
         # Get doctor's working time configuration
         try:
             avg_appointment_duration = int(doctor['avg_appointment_duration'])  # in minutes
             
             if 'working_time' not in doctor or not doctor['working_time']:
                 raise KeyError("Working time not configured for doctor")
-                
-            working_time = doctor['working_time'][0]  # Get the first element of the working_time array
+            
+            # Handle index for scheduled day
+            schedule_index = 0  # Default to first schedule
+            
+            # Get the working time configuration
+            working_time = doctor['working_time'][schedule_index]
             
             # Extract working days and holidays
             working_days = [day.lower() for day in working_time.get('working_days', [])]
@@ -549,11 +553,24 @@ async def get_available_slots(CIN: str, date: str):
                     "available_slots": []
                 }
             
-            # Extract time information
-            start_time = working_time['start_time']
-            end_time = working_time['end_time']
-            start_break_time = working_time['start_break_time']
-            end_break_time = working_time['end_break_time']
+            # Extract time information as arrays - we'll consider all time slots
+            start_times = working_time['start_time'] if isinstance(working_time['start_time'], list) else [working_time['start_time']]
+            end_times = working_time['end_time'] if isinstance(working_time['end_time'], list) else [working_time['end_time']]
+            start_break_times = working_time['start_break_time'] if isinstance(working_time['start_break_time'], list) else [working_time['start_break_time']]
+            end_break_times = working_time['end_break_time'] if isinstance(working_time['end_break_time'], list) else [working_time['end_break_time']]
+            
+            # Ensure all arrays have the same length by extending shorter ones with their last value
+            max_len = max(len(start_times), len(end_times), len(start_break_times), len(end_break_times))
+            
+            def extend_array(arr, target_len):
+                if len(arr) < target_len and len(arr) > 0:
+                    arr.extend([arr[-1]] * (target_len - len(arr)))
+                return arr
+                
+            start_times = extend_array(start_times, max_len)
+            end_times = extend_array(end_times, max_len)
+            start_break_times = extend_array(start_break_times, max_len)
+            end_break_times = extend_array(end_break_times, max_len)
             
         except (KeyError, IndexError, ValueError) as e:
             logger.error(f"Invalid doctor schedule configuration: {str(e)}")
@@ -561,12 +578,6 @@ async def get_available_slots(CIN: str, date: str):
                 status_code=status.HTTP_400_BAD_REQUEST, 
                 detail=f"Invalid doctor schedule configuration: {str(e)}"
             )
-        
-        # Convert string times to datetime objects for easier manipulation
-        start_datetime = datetime.strptime(f"{date_str} {start_time}", "%d-%m-%Y %H:%M")
-        end_datetime = datetime.strptime(f"{date_str} {end_time}", "%d-%m-%Y %H:%M")
-        start_break_datetime = datetime.strptime(f"{date_str} {start_break_time}", "%d-%m-%Y %H:%M")
-        end_break_datetime = datetime.strptime(f"{date_str} {end_break_time}", "%d-%m-%Y %H:%M")
         
         # Get all existing appointments for the doctor on the given date
         appointments = await conn.booking.appointment.find({
@@ -581,20 +592,32 @@ async def get_available_slots(CIN: str, date: str):
             appointment_datetime = datetime.strptime(f"{date_str} {appointment_time}", "%d-%m-%Y %H:%M")
             unavailable_slots.append(appointment_datetime)
         
-        # Generate all possible time slots based on working hours and appointment duration
+        # Generate all possible time slots based on all working periods
         all_slots = []
         
-        # First part of the day (before break)
-        current_slot = start_datetime
-        while current_slot + timedelta(minutes=avg_appointment_duration) <= start_break_datetime:
-            all_slots.append(current_slot)
-            current_slot = current_slot + timedelta(minutes=avg_appointment_duration)
-        
-        # Second part of the day (after break)
-        current_slot = end_break_datetime
-        while current_slot + timedelta(minutes=avg_appointment_duration) <= end_datetime:
-            all_slots.append(current_slot)
-            current_slot = current_slot + timedelta(minutes=avg_appointment_duration)
+        # Process each time slot for the day
+        for i in range(len(start_times)):
+            try:
+                # Convert string times to datetime objects for easier manipulation
+                start_datetime = datetime.strptime(f"{date_str} {start_times[i]}", "%d-%m-%Y %H:%M")
+                end_datetime = datetime.strptime(f"{date_str} {end_times[i]}", "%d-%m-%Y %H:%M")
+                start_break_datetime = datetime.strptime(f"{date_str} {start_break_times[i]}", "%d-%m-%Y %H:%M")
+                end_break_datetime = datetime.strptime(f"{date_str} {end_break_times[i]}", "%d-%m-%Y %H:%M")
+                
+                # First part of the day (before break)
+                current_slot = start_datetime
+                while current_slot + timedelta(minutes=avg_appointment_duration) <= start_break_datetime:
+                    all_slots.append(current_slot)
+                    current_slot = current_slot + timedelta(minutes=avg_appointment_duration)
+                
+                # Second part of the day (after break)
+                current_slot = end_break_datetime
+                while current_slot + timedelta(minutes=avg_appointment_duration) <= end_datetime:
+                    all_slots.append(current_slot)
+                    current_slot = current_slot + timedelta(minutes=avg_appointment_duration)
+            except Exception as e:
+                logger.warning(f"Error processing time slot {i}: {str(e)}")
+                continue
         
         # Filter out unavailable slots
         available_slots = []
@@ -602,22 +625,29 @@ async def get_available_slots(CIN: str, date: str):
             if slot not in unavailable_slots:
                 available_slots.append(slot.strftime("%H:%M"))
 
-        working_address = []
-        for address in doctor['work_address']:
-            working_address.append(address)
+        # Extract working addresses properly
+        working_address = doctor.get('work_address', [])
             
-        # Create response
+        # Create response with all working hours
+        working_hours_array = []
+        for i in range(len(start_times)):
+            working_hours_array.append({
+                "start_time": start_times[i],
+                "end_time": end_times[i],
+                "break_time": {
+                    "start": start_break_times[i],
+                    "end": end_break_times[i]
+                }
+            })
+        
+        # Sort available slots by time
+        available_slots.sort()
+        
         available_dict = {
             "CIN": CIN,
             "date": date_str,
-            "working_hours": {
-                "start_time": start_time,
-                "end_time": end_time,
-                "break_time": {
-                    "start": start_break_time,
-                    "end": end_break_time
-                }
-            },
+            "working_hours": working_hours_array[0] if working_hours_array else {},  # Keep first one for backward compatibility
+            "all_working_hours": working_hours_array,  # Include all working hours
             "working_days": [day.capitalize() for day in working_days] if working_days else [],
             "holidays": [day.capitalize() for day in holidays] if holidays else [],
             "working_address": working_address,
@@ -635,7 +665,6 @@ async def get_available_slots(CIN: str, date: str):
         create_new_log("error", f"Error fetching available slots: {formatted_error}", "/api/backend/Appointment")
         logger.error(f"Error fetching available slots: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
-    
         
 @patient_book.get("/refresh/available_slots/{CIN}/{date}", status_code=status.HTTP_200_OK)
 async def refresh_available_slots(CIN: str, date: str):
