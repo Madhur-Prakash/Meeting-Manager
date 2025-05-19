@@ -502,7 +502,7 @@ async def get_available_slots(CIN: str, date: str):
             date_str = selected_date.strftime("%d-%m-%Y")
             day_name = selected_date.strftime("%A").lower()  # Get day name in lowercase
         except ValueError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date format. Please use DD-MM-YY")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date format. Please use DD-MM-YYYY")
         
         # Check cache first
         cache_data = await get_appointment_slot(date_str, CIN)
@@ -517,7 +517,7 @@ async def get_available_slots(CIN: str, date: str):
         if not doctor:
             logger.error(f"Doctor not found with CIN: {CIN}")
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
-        
+        # print(doctor['work_address']) #debugging
         # Get doctor's working time configuration
         try:
             avg_appointment_duration = int(doctor['avg_appointment_duration'])  # in minutes
@@ -602,6 +602,10 @@ async def get_available_slots(CIN: str, date: str):
             if slot not in unavailable_slots:
                 available_slots.append(slot.strftime("%H:%M"))
 
+        working_address = []
+        for address in doctor['work_address']:
+            working_address.append(address)
+            
         # Create response
         available_dict = {
             "CIN": CIN,
@@ -616,6 +620,7 @@ async def get_available_slots(CIN: str, date: str):
             },
             "working_days": [day.capitalize() for day in working_days] if working_days else [],
             "holidays": [day.capitalize() for day in holidays] if holidays else [],
+            "working_address": working_address,
             "avg_appointment_duration": avg_appointment_duration,
             "available_slots": available_slots
         }
