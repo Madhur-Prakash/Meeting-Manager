@@ -43,8 +43,8 @@ async def get_all(email: str):
             appo.append(appointment_data)
             
             # Cache the appointment
-            await client.hset(
-                f"appointment:{email}:{appointment['_id']}", mapping=appointment_data)
+            await client.hset(f"appointment:{email}:{appointment['_id']}", mapping=appointment_data)
+            await client.expire(f"appointment:{email}:{appointment['_id']}", 3600)  # Set expiration time to 1 hour
         
         return appo
     
