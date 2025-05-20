@@ -62,11 +62,11 @@ async def delete_cached_appointments(email: str):
         cache_keys = await client.keys(f"appointment:{email}:*")
         if cache_keys:
             await client.delete(*cache_keys)
-            create_new_log("info", f"Deleted cached appointments for CIN {email}", "/api/backend/Appointment")
-            logger.info(f"Deleted cached appointments for CIN {email}")
-            return {"message": f"Deleted {len(cache_keys)} cached appointments for CIN {email}", "status_code": status.HTTP_200_OK}
+            create_new_log("info", f"Deleted cached appointments for email {email}", "/api/backend/Appointment")
+            logger.info(f"Deleted cached appointments for email {email}")
+            return {"message": f"Deleted {len(cache_keys)} cached appointments for email {email}", "status_code": status.HTTP_200_OK}
         else:
-            return {"message": f"No cached appointments found for CIN {email}", "status_code": status.HTTP_404_NOT_FOUND}
+            return {"message": f"No cached appointments found for email {email}", "status_code": status.HTTP_404_NOT_FOUND}
     except Exception as e:
         formatted_error = traceback.format_exc()
         create_new_log("error", f"Error deleting cached appointments: {formatted_error}", "/api/backend/Appointment")
