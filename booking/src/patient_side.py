@@ -37,14 +37,12 @@ async def get_all(email: str):
         for appointment in appointments:
             appointment_data = {
                 "doctor_name": appointment["doctor_name"],
-                "patient_name": appointment["patient_name"],
-                "email": appointment["email"],
                 "appointment_date": appointment["appointment_date"],
                 "appointment_time": appointment["appointment_time"],
                 "CIN": appointment["CIN"],
                 "status": appointment["status"],
                 "appointment_id": appointment["appointment_id"],
-                "number_of_appointments": appointment["number_of_appointments"],
+                "number_of_appointments": appointment["number_of_appointments"]
             }
             appo.append(appointment_data)
             
@@ -711,8 +709,6 @@ async def patient_get_previous_appoitment(email: str):
                 "status": appointment["status"],
                 "appointment_id": appointment["appointment_id"],
                 "CIN": appointment["CIN"],
-                "patient_name": appointment["patient_name"],
-                "email": appointment["email"],
                 "number_of_appointments": appointment["number_of_appointments"]
             }
             appo.append(appointment_data)

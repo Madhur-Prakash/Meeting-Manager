@@ -45,8 +45,6 @@ async def get_all(CIN: str):
                 "appointment_time": appointment["appointment_time"],
                 "status": appointment["status"],
                 "appointment_id": appointment["appointment_id"],
-                "doctor_name": appointment["doctor_name"],
-                "CIN": appointment["CIN"],
                 "email": appointment["email"],
                 "number_of_appointments": appointment["number_of_appointments"]
             }
@@ -371,8 +369,6 @@ async def doctor_get_previous_appointment(CIN: str):
                 "appointment_time": appointment["appointment_time"],
                 "status": appointment["status"],
                 "appointment_id": appointment["appointment_id"],
-                "doctor_name": appointment["doctor_name"],
-                "CIN": appointment["CIN"],
                 "email": appointment["email"],
                 "number_of_appointments": appointment["number_of_appointments"]
             }
