@@ -42,7 +42,13 @@ async def get_all(CIN: str):
             appointment_data = {
                 "patient_name": appointment["patient_name"],
                 "appointment_date": appointment["appointment_date"],
-                "appointment_time": appointment["appointment_time"]
+                "appointment_time": appointment["appointment_time"],
+                "status": appointment["status"],
+                "appointment_id": appointment["appointment_id"],
+                "doctor_name": appointment["doctor_name"],
+                "CIN": appointment["CIN"],
+                "email": appointment["email"],
+                "number_of_appointments": appointment["number_of_appointments"]
             }
             appo.append(appointment_data)
             
@@ -362,7 +368,13 @@ async def doctor_get_previous_appointment(CIN: str):
             appointment_data = {
                 "patient_name": appointment["patient_name"],
                 "appointment_date": appointment["appointment_date"],
-                "appointment_time": appointment["appointment_time"]
+                "appointment_time": appointment["appointment_time"],
+                "status": appointment["status"],
+                "appointment_id": appointment["appointment_id"],
+                "doctor_name": appointment["doctor_name"],
+                "CIN": appointment["CIN"],
+                "email": appointment["email"],
+                "number_of_appointments": appointment["number_of_appointments"]
             }
             appo.append(appointment_data)
             
