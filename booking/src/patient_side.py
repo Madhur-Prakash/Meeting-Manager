@@ -651,8 +651,7 @@ async def get_available_slots(CIN: str, date: str):
         available_dict = {
             "CIN": CIN,
             "date": date_str,
-            "working_hours": working_hours_array[0] if working_hours_array else {},  # Keep first one for backward compatibility
-            "all_working_hours": working_hours_array,  # Include all working hours
+            "working_hours": working_hours_array,  # Include all working hours
             "working_days": [day.capitalize() for day in working_days] if working_days else [],
             "holidays": [day.capitalize() for day in holidays] if holidays else [],
             "working_address": working_address,
