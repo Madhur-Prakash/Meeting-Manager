@@ -152,15 +152,55 @@ async def get_appointment_slot(date: str, cin: str):
         return {
             "CIN": cached_data["CIN"],
             "date": cached_data["date"],
-            "avg_appointment_duration":cached_data["avg_appointment_duration"],
             "working_hours": json.loads(cached_data["working_hours"]),
+            "all_working_hours": json.loads(cached_data["all_working_hours"]),
+            "working_days": json.loads(cached_data["working_days"]),
+            "holidays": json.loads(cached_data["holidays"]),
+            "working_address": json.loads(cached_data["working_address"]),
+            "avg_appointment_duration":cached_data["avg_appointment_duration"],
             "available_slots": json.loads(cached_data["available_slots"])
         }
     else:
         print("No appointment slots available in cache")
         return None
     
+async def get_busy_date(cin: str):
+    pattern = f"busy_date:{cin}:*"
+    try:
+        keys = await client.keys(pattern)
+        if not keys:
+            return None
 
+        key = keys[0]
+        cached_data = await client.hgetall(key)
+        if not cached_data:
+            return None
+
+        result = {}
+        for k, v in cached_data.items():
+            try:
+                result[k] = json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                result[k] = v
+        return result
+    except Exception as e:
+        logger.error(f"Error getting cached busy date: {str(e)}")
+        return None
+
+
+
+async def set_busy_date(cin: str, today: str, form: dict):
+    """Cache busy date data"""
+    key = f"busy_date:{cin}:{today}"
+    try:
+        redis_data = {k: json.dumps(v, cls=CustomJSONEncoder) if isinstance(v, (dict, list)) else str(v)
+                      for k, v in form.items()}
+        await client.hset(key, mapping=redis_data)
+        await client.expire(key, 8 * 24 * 60 * 60)  # Cache for 8 days
+        print("Busy date cached successfully")
+        logger.info(f"Busy date cached successfully for {cin}")
+    except Exception as e:
+        logger.error(f"Error caching busy date: {str(e)}")
 
 
 def authenticate_gmail():

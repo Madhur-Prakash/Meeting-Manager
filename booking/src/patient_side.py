@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
+from collections import defaultdict
 from fastapi.templating import Jinja2Templates
 from datetime import datetime, timedelta
 import os
@@ -7,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from models import models
 import traceback
 from booking.config.redis_config import client
-from ..helper.utils import setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment, send_email, send_email_ses, create_new_log, set_appointment_slot, get_appointment_slot
+from ..helper.utils import get_busy_date, setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment, send_email, send_email_ses, create_new_log, set_appointment_slot, get_appointment_slot, set_busy_date
 from ..config.database import conn
 
 patient_book = APIRouter()
@@ -683,6 +684,367 @@ async def refresh_available_slots(CIN: str, date: str):
         logger.error(f"Error refreshing available slots: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+
+
+@patient_book.get("/patient/get/busy_date/{CIN}", status_code=status.HTTP_200_OK)
+async def get_busy_dates_api(CIN: str):
+    try:
+        # Check cache first
+        cache_data = await get_busy_date(CIN)
+        if cache_data:
+            print("data from cache")
+            logger.info(f"Cache hit for busy dates: {CIN}")
+            create_new_log("info", f"Cache hit for busy dates: {CIN}", "/api/backend/Appointment")
+            return cache_data
+        print("data from database")
+        # Get doctor details
+        doctor = await conn.public_profile_data.doctor.find_one({"CIN": CIN})
+        if not doctor:
+            logger.error(f"Doctor not found with CIN: {CIN}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
+
+        # Calculate date range for next 3 months
+        today = datetime.now().date()
+        # print("today", today)
+        end_date = today + timedelta(days=90)  # Approximately 3 months
+        # print("end_date", end_date)
+        
+        # Convert dates to string format for comparison
+        today_str = today.strftime("%d-%m-%Y")
+        # print("today_str", today_str)
+        end_date_str = end_date.strftime("%d-%m-%Y")
+        # print("end_date_str", end_date_str)
+
+        # Get all existing appointments for the doctor within the next 3 months
+        # REMOVED status filter to include ALL appointments for debugging
+        appointments = await conn.booking.appointment.find({"CIN": CIN}).to_list(length=None)
+        if not appointments:
+            logger.warning(f"No appointments found for doctor: {CIN}")
+            result = {
+                "CIN": CIN, 
+                "busy_dates": [], 
+                "date_range": {"from": today_str, "to": end_date_str},
+                "message": "No appointments found",
+                "debug_doctor_keys": list(doctor.keys())
+            }
+            await set_busy_date(CIN, result)
+            return result
+        print("total appointments",len(appointments))
+        print(f"Found {len(appointments)} total appointments for doctor {CIN}")
+
+        filtered_appointments = []
+        for a in appointments:
+            try:
+                appt_date = datetime.strptime(a["appointment_date"], "%d-%m-%Y").date()
+                if today <= appt_date <= end_date:
+                    filtered_appointments.append(a)
+            except Exception as e:
+                print(f"Invalid date in record: {a.get('appointment_date')} -> {e}")
+
+        # Extract doctor's working schedule
+        working_time = doctor.get('working_time', [])
+        # print("working_time", working_time)
+        
+        if not working_time:
+            logger.warning(f"No working time found for doctor: {CIN}")
+            result = {
+                "CIN": CIN, 
+                "busy_dates": [], 
+                "date_range": {"from": today_str, "to": end_date_str},
+                "message": "No working time configured",
+                "debug_doctor_keys": list(doctor.keys())
+            }
+            await set_busy_date(CIN, result)
+            return result
+
+        # Extract working days - Multiple strategies
+        working_days = working_time[0].get('working_days', [])
+        print("working_days", working_days)
+        # print("working days", working_time)['working days']
+        # Strategy 1: Direct working_days field
+        if working_days:
+            print("inside working days")
+            raw_working_days = working_days
+            # print(f"Raw working_days field: {raw_working_days}")
+            
+            if isinstance(raw_working_days, list):
+                # print("print inside list")
+                working_days = [day.lower().strip() for day in raw_working_days if day]
+                # print("after update", working_days)
+            elif isinstance(raw_working_days, str):
+                # print("print inside string")
+                # Handle comma-separated string
+                working_days = [day.lower().strip() for day in raw_working_days.split(',') if day.strip()]
+        
+        # Strategy 2: From your image data structure - handle nested structure
+        if not working_days:
+            # Based on your image, it seems like working_days might be nested deeper
+            # Let's try to find it in various places
+            for key in doctor.keys():
+                print(f"Checking key: {key}")
+                if 'working' in key.lower() or 'days' in key.lower():
+                    # print(f"Found potential working days field '{key}': {doctor[key]}")
+                    
+                    value = doctor[key]
+                    if isinstance(value, list) and len(value) > 0:
+                        # Check if it's a list of day names
+                        if all(isinstance(item, str) for item in value):
+                            working_days = [day.lower().strip() for day in value]
+                            break
+                        # Check if it's a list of objects containing days
+                        elif all(isinstance(item, dict) for item in value):
+                            for item in value:
+                                if 'days' in item:
+                                    working_days.extend([day.lower().strip() for day in item['days']])
+        
+        print(f"Final working days for doctor {CIN}: {working_days}")
+        
+        # Get average appointment duration
+        avg_appointment_duration = int(doctor.get('avg_appointment_duration', None))  # Default 30 minutes
+        print(f"Average appointment duration: {avg_appointment_duration}")
+        
+        # Get holidays (array of date strings)
+        holidays = working_time[0].get('holidays', [])
+        # print("doctor", doctor)
+        print(f"Holidays: {holidays}")
+
+        def calculate_available_slots_per_day():
+            """Calculate total available appointment slots per working day"""
+            total_minutes = 0
+            
+            print(f"Calculating slots from working_time: {working_time}")
+            
+            for work_schedule in working_time:
+                # print(f"Processing work schedule: {work_schedule}")
+                
+                # Parse start and end times
+                start_times = work_schedule.get('start_time', [])
+                end_times = work_schedule.get('end_time', [])
+                start_break_times = work_schedule.get('start_break_time', [])
+                end_break_times = work_schedule.get('end_break_time', [])
+                
+                # print(f"Start times: {start_times}, End times: {end_times}")
+                # print(f"Break start: {start_break_times}, Break end: {end_break_times}")
+                # print("len" ,len(start_times), len(end_times), len(start_break_times), len(end_break_times))
+                
+                # Calculate working minutes for each time slot
+                for i in range(len(start_times)):
+                    if i < len(end_times):
+                        try:
+                            start_time = datetime.strptime(start_times[i], "%H:%M")
+                            end_time = datetime.strptime(end_times[i], "%H:%M")
+                            
+                            # Calculate total work minutes
+                            work_minutes = (end_time - start_time).total_seconds() / 60
+                            print(f"Work minutes for slot {i}: {work_minutes}")
+                            
+                            # Subtract break time if exists
+                            if (i < len(start_break_times) and i < len(end_break_times) and 
+                                start_break_times[i] and end_break_times[i]):
+                                start_break = datetime.strptime(start_break_times[i], "%H:%M")
+                                end_break = datetime.strptime(end_break_times[i], "%H:%M")
+                                break_minutes = (end_break - start_break).total_seconds() / 60
+                                work_minutes -= break_minutes
+                                print(f"After subtracting {break_minutes} break minutes: {work_minutes}")
+                            
+                            total_minutes += max(0, work_minutes)  # Ensure no negative minutes
+                            print(f"Total minutes after slot {i}: {total_minutes}")
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Error parsing time for doctor {CIN}: {str(e)}")
+                            continue
+            
+            print(f"Total working minutes: {total_minutes}")
+            # Calculate number of appointment slots
+            slots = int(total_minutes // avg_appointment_duration) if avg_appointment_duration > 0 else 0
+            print(f"Calculated slots per day: {slots}")
+            return slots
+
+        def get_day_name(date_str):
+            """Convert date string to day name"""
+            try:
+                # Try different date formats
+                for fmt in ["%d-%m-%Y", "%Y-%m-%d", "%m-%d-%Y"]:
+                    try:
+                        date_obj = datetime.strptime(date_str, fmt)
+                        day_name = date_obj.strftime("%A").lower()
+                        print(f"Date {date_str} is {day_name}")
+                        return day_name
+                    except ValueError:
+                        continue
+                logger.warning(f"Could not parse date: {date_str}")
+                return None
+            except Exception as e:
+                logger.error(f"Error getting day name for {date_str}: {str(e)}")
+                return None
+
+        def is_date_in_range(date_str):
+            """Check if date is within the next 3 months"""
+            try:
+                for fmt in ["%d-%m-%Y", "%Y-%m-%d", "%m-%d-%Y"]:
+                    try:
+                        date_obj = datetime.strptime(date_str, fmt).date()
+                        in_range = today <= date_obj <= end_date
+                        # print(f"Date {date_str} in range: {in_range}")
+                        return in_range
+                    except ValueError:
+                        continue
+                logger.warning(f"Could not parse date for range check: {date_str}")
+                return False
+            except Exception as e:
+                logger.error(f"Error checking date range for {date_str}: {str(e)}")
+                return False
+
+        # Calculate available slots per day
+        max_slots_per_day = calculate_available_slots_per_day()
+        
+        if max_slots_per_day == 0:
+            logger.warning(f"No available slots calculated for doctor: {CIN}")
+            result = {
+                "CIN": CIN, 
+                "busy_dates": [],
+                "max_slots_per_day": 0,
+                "total_busy_dates": 0,
+                "working_days": working_days,
+                "date_range": {"from": today_str, "to": end_date_str},
+                "message": "No available appointment slots configured, error in doctor schedule",
+            }
+            await set_busy_date(CIN, result)
+            return result
+
+        # Group filtered_appointments by date (only for dates within range)
+        appointments_by_date = defaultdict(int)
+        valid_appointments = 0
+        
+        for appointment in filtered_appointments:
+            appointment_date = appointment.get('appointment_date')
+            appointment_status = appointment.get('status')
+            
+            # print(f"Processing appointment: date={appointment_date}, status={appointment_status}")
+            
+            if appointment_date and is_date_in_range(appointment_date):
+                # For now, count all filtered_appointments regardless of status for debugging
+                appointments_by_date[appointment_date] += 1
+                valid_appointments += 1
+                # print(f"Counted appointment for date: {appointment_date}")
+
+        print(f"Valid filtered_appointments within range: {valid_appointments}")
+        print(f"Appointments by date: {dict(appointments_by_date)}")
+
+        # Find busy dates within the next 3 months
+        busy_dates = []
+        
+        for date, appointment_count in appointments_by_date.items():
+            print(f"Processing date: {date} with {appointment_count} filtered_appointments")
+            
+            # Skip if date is a holiday
+            if date in holidays:
+                print(f"Skipping holiday date: {date}")
+                continue
+            
+            # Check if date falls on a working day
+            day_name = get_day_name(date)
+            
+            if not day_name:
+                logger.warning(f"Could not determine day name for date: {date}")
+                continue
+                
+            print(f"Date {date} is {day_name}, checking against working days: {working_days}")
+            
+            if day_name not in working_days:
+                print(f"Skipping non-working day: {date} ({day_name})")
+                continue
+            
+            # Check if filtered_appointments equal or exceed available slots
+            print(f"Comparing {appointment_count} filtered_appointments vs {max_slots_per_day} max slots")
+            if appointment_count >= max_slots_per_day:
+                busy_dates.append(date)
+                logger.info(f"BUSY DATE FOUND: {date} ({appointment_count}/{max_slots_per_day} slots)")
+
+        # Sort busy dates
+        def sort_date(date_str):
+            """Sort key function for dates"""
+            for fmt in ["%d-%m-%Y", "%Y-%m-%d", "%m-%d-%Y"]:
+                try:
+                    return datetime.strptime(date_str, fmt)
+                except ValueError:
+                    continue
+            return datetime.min  # Fallback for unparseable dates
+
+        try:
+            busy_dates.sort(key=sort_date)
+        except Exception:
+            busy_dates.sort()  # Fallback to string sort
+
+
+        #  get day name for busy dates as well
+        busy_dates_with_day_name = []
+        for date in busy_dates:
+            day_name = get_day_name(date)
+            if day_name:
+                busy_dates_with_day_name.append(day_name)
+        print(f"Busy dates with day names: {busy_dates_with_day_name}")
+
+        # Prepare result
+        result = {
+            "CIN": CIN,
+            "busy_dates": busy_dates,
+            "busy_days_name": busy_dates_with_day_name,
+            "max_slots_per_day": max_slots_per_day,
+            "total_busy_dates": len(busy_dates),
+            "working_days": working_days,
+            "total_holidays": len(holidays),
+            "holidays": holidays,
+            "date_range": {
+                "from": today_str,
+                "to": end_date_str
+            },
+            "appointments_by_date": dict(appointments_by_date)
+        }
+        
+        # Cache the result
+        await set_busy_date(CIN, today_str, result)
+
+        logger.info(f"Successfully calculated busy dates for doctor {CIN} for next 3 months: {len(busy_dates)} busy dates found")
+        create_new_log("info", f"Successfully calculated busy dates for doctor {CIN} for next 3 months: {len(busy_dates)} busy dates", "/api/backend/Appointment")
+        
+        return result
+    
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error fetching busy dates: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error fetching busy dates: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+
+
+@patient_book.get("/refresh/get_busy_date/{CIN}", status_code=status.HTTP_200_OK)
+async def refresh_busy_dates(CIN: str):
+    try:
+        # Get all keys that match the pattern
+        cache_keys = await client.keys(f"busy_date:{CIN}:*")
+        
+        if cache_keys:
+            await client.delete(*cache_keys)  # Unpack and delete all matching keys
+            create_new_log("info", f"Deleted cached busy dates for CIN {CIN}", "/api/backend/Appointment")
+            logger.info(f"Deleted {len(cache_keys)} cached busy dates for CIN {CIN}")
+            return {
+                "message": f"Deleted {len(cache_keys)} cached busy dates for CIN {CIN}",
+                "status_code": status.HTTP_200_OK
+            }
+        else:
+            return {
+                "message": f"No cached busy dates found for CIN {CIN}",
+                "status_code": status.HTTP_404_NOT_FOUND
+            }
+
+    except Exception as e:
+        formatted_error = traceback.format_exc()
+        create_new_log("error", f"Error deleting cached busy dates: {formatted_error}", "/api/backend/Appointment")
+        logger.error(f"Error deleting cached busy dates: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
 
 @patient_book.get("/patient/previous_appointments/{email}", status_code=status.HTTP_200_OK)
 async def patient_get_previous_appoitment(email: str):
