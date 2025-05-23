@@ -153,7 +153,6 @@ async def get_appointment_slot(date: str, cin: str):
             "CIN": cached_data["CIN"],
             "date": cached_data["date"],
             "working_hours": json.loads(cached_data["working_hours"]),
-            "all_working_hours": json.loads(cached_data["all_working_hours"]),
             "working_days": json.loads(cached_data["working_days"]),
             "holidays": json.loads(cached_data["holidays"]),
             "working_address": json.loads(cached_data["working_address"]),
