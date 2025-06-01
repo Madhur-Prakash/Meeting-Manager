@@ -1,30 +1,28 @@
 # Appointment Booking System
-
-**A FastAPI-Based Appointment Booking Application**
-
 ## Overview
-This project is a simple and efficient appointment booking system implemented using FastAPI and MongoDB. It allows users to book appointments with specific doctors, ensuring a 30-minute time gap between appointments to avoid scheduling conflicts.
+This FastAPI practice project is designed for a doctor-patient appointment booking system. The system allows patients to book appointments, reschedule, or cancel existing ones. Both doctors and patients can view their past and upcoming appointments. The system also features a caching mechanism for fast data transfer and calculates available appointment slots in advance for 90 days.
 
 ---
 
 ## Features
-- **Doctor and Patient Management**: Manage appointments for doctors and patients with ease.
-- **Time Slot Validation**: Ensures a minimum 30-minute gap between consecutive appointments for the same doctor.
-- **Interactive Web Interface**: Utilizes Jinja2 templates for user-friendly appointment booking and viewing.
-- **Secure and Scalable**: Built with FastAPI and MongoDB for high performance and scalability.
+- **Appointment Booking**: Patients can book appointments with available time slots.
+- **Rescheduling**: Both patients and doctors can reschedule appointments.
+- **Cancellation**: Appointments can be canceled by either party.
+- **Appointment History**: Doctors and patients can view their past and upcoming appointments.
+- **Caching**: Applied for fast data transfer to improve system performance.
+- **Advanced Slot Calculation**: Available appointment slots are calculated in advance for 90 days.
 
 ---
 
 ## Technology Stack
 - **Backend Framework**: FastAPI
-- **Database**: MongoDB
-- **Frontend Templates**: Jinja2
+- **Database**: Managed through `database.py` in the `booking/config` directory
+- **Caching**: Redis (configured in `redis_config.py`)
 - **Programming Language**: Python
 
 ---
 
 ## Installation
-
 1. Clone the repository:
    ```bash
    git clone git@github.com:Madhur-Prakash/appointment-booking.git
@@ -42,64 +40,81 @@ This project is a simple and efficient appointment booking system implemented us
    ```bash
    pip install -r requirements.txt
    ```
-5. Set up MongoDB:
-   - Install MongoDB and start the service.
-   - Configure the MongoDB URI in the `.env` file.
+5. Configure the `.env` file as necessary for your environment.
 
 ---
 
 ## Usage
-
 1. Start the FastAPI server:
    ```bash
    uvicorn app:app --reload
    ```
-2. Access the web interface at:
+2. Access the API documentation at:
    ```
-   http://127.0.0.1:8000/
+   http://127.0.0.1:8000/docs
    ```
-3. Use the interface to:
-   - View existing appointments.
-   - Book a new appointment by providing details such as doctor name, patient name, email, and desired time slot.
+3. Use the API to manage appointments, including booking, rescheduling, and cancellation.
 
 ---
 
 ## API Endpoints
-
-### Appointment Management
-- **GET /**: Retrieve and display all appointments.
-- **POST /**: Book a new appointment with time slot validation.
+API endpoints are accessible through the FastAPI application and can be found in the API documentation at `http://127.0.0.1:8000/docs`. Endpoints include but are not limited to:
+- **POST /book-appointment**: Book a new appointment.
+- **POST /reschedule-appointment**: Reschedule an existing appointment.
+- **POST /cancel-appointment**: Cancel an appointment.
+- **GET /appointments**: View all appointments (past and upcoming).
 
 ---
 
 ## Project Structure
-
 ```plaintext
 appointment-booking/
-├── booking/
-│   ├── templates/       # HTML templates (Jinja2)
-│   ├── __init__.py      # Package initializer
-│   ├── book.py          # API routes for booking
-│   ├── databse.py       # MongoDB connection setup
-│   ├── models.py        # Database models
-│   ├── schemas.py       # Data schemas for validation
-├── app.py               # Entry point for FastAPI
-├── requirements.txt     # Python dependencies
-├── .gitignore           # Ignored files and directories
-├── README.md            # Project documentation
+├── .env
+├── .gitignore  # gitignore file for GitHub
+├── README.md  # Project documentation
+├── __init__.py  # initializes package
+├── app.py  # main FastAPI app
+├── booking
+│   ├── __init__.py  # initializes package
+│   ├── config
+│   │   ├── __init__.py  # initializes package
+│   │   ├── celery_app.py
+│   │   ├── database.py
+│   │   └── redis_config.py
+│   ├── helper
+│   │   ├── __init__.py  # initializes package
+│   │   └── utils.py
+│   ├── models
+│   │   ├── __init__.py  # initializes package
+│   │   └── models.py  # models
+│   ├── src
+│   │   ├── __init__.py  # initializes package
+│   │   ├── doctor_side.py
+│   │   └── patient_side.py
+│   ├── templates
+│   │   ├── cached_appointment.html
+│   │   ├── doc.html
+│   │   └── index.html
+│   └── test_api
+│       ├── __init__.py  # initializes package
+│       ├── api_hit.py
+│       ├── fake_doctors.py
+│       └── try_test.py
+├── credentials.json
+├── requirements.txt
+└── token.pickle
 ```
 
 ---
 
 ## Future Enhancements
-- Add user authentication for patients and doctors.
-- Implement notification system for appointment reminders.
-- Provide a dashboard for managing appointments and doctor availability.
+- Implement user authentication for doctors and patients.
+- Add reminders for upcoming appointments.
+- Integrate with calendar services for seamless scheduling.
 
 ---
 
 ## Contribution Guidelines
-
 Contributions are welcome! To contribute:
 1. Fork the repository.
 2. Create a new branch for your feature or bug fix.
@@ -113,11 +128,5 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ---
 
 ## Author
-**Madhur Prakash**  
-[GitHub](https://github.com/Madhur-Prakash) | [Medium](https://medium.com/@madhurprakash2005)
-
----
-
-## Acknowledgements
-- Faculty Guide: Anshul Tickoo
-- Amity School of Engineering and Technology
+**Madhur-Prakash**  
+[GitHub](https://github.com/Madhur-Prakash)
