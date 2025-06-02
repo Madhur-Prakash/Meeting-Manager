@@ -4,25 +4,24 @@ from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
 
 class Booking(BaseModel):
-    doctor_name: str = Field(..., title = "doctor name")
-    patient_name: str = Field(..., title = "patient name")
-    email: str = Field(..., title = "Email of patient")
-    appointment_date: str = Field(..., title = "Appointment date")
-    appointment_time: str = Field(..., title = "Appointment time")
-    CIN: str = Field(..., title = "CIN of doctor")
+    user_name: str = Field(..., title = "User name")
+    email: str = Field(..., title = "Email of user")
+    meeting_date: str = Field(..., title = "Meeting date")
+    meeting_time: str = Field(..., title = "Meeting time")
+    CIN: str = Field(..., title = "CIN of user")
 
 class Reschedule_Appointment(BaseModel):
-    CIN: str = Field(..., title = "CIN of doctor")
-    appointment_date: str = Field(..., title = "Appointment date")
-    appointment_time: str = Field(..., title = "Appointment time")
+    CIN: str = Field(..., title = "CIN of user")
+    meeting_date: str = Field(..., title = "Meeting date")
+    meeting_time: str = Field(..., title = "Meeting time")
     reason: str = Field(..., title = "Reason for rescheduling")
-    appointment_id: str = Field(..., title = "Appointment ID")
+    meeting_id: str = Field(..., title = "Meeting ID")
 
 class cancel(BaseModel):
-    appointment_id: str = Field(..., title = "Appointment ID")
+    meeting_id: str = Field(..., title = "Meeting ID")
 
 class done(BaseModel):
-    appointment_id: List[str] = Field(..., title = "Appointment ID")
+    meeting_id: List[str] = Field(..., title = "Meeting ID")
 
 class Doctor(BaseModel):
     full_name: str = Field(None, title="Full Name of the User")
@@ -34,10 +33,10 @@ class Doctor(BaseModel):
     disabled: bool = Field(default=False, title="User Account Status")
 
 class res(BaseModel):
-    doctor_name: Optional[str]
-    appointment_date: Optional[str]
-    appointment_time: Optional[str]
-    appointment_id: Optional[str]
+    user_name: Optional[str]
+    meeting_date: Optional[str]
+    meeting_time: Optional[str]
+    meeting_id: Optional[str]
     CIN: Optional[str]
     status: bool
 

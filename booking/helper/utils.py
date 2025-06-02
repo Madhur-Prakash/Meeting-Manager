@@ -39,7 +39,7 @@ def setup_logging():
 
         # create a file handler
         file_handler = ConcurrentRotatingFileHandler(
-            os.path.join(log_dir, "appointment.log"), 
+            os.path.join(log_dir, "meeting.log"), 
             maxBytes=10000, # 10KB 
             backupCount=500
         )
@@ -66,59 +66,58 @@ rand_numbers = set()
 
 def  random_number():
     digits = string.digits
-    appointment_id = ''.join(random.choice(digits) for i in range(6))
-    if appointment_id not in rand_numbers:
-        rand_numbers.add(appointment_id)
-        return appointment_id
+    meeting_id = ''.join(random.choice(digits) for i in range(6))
+    if meeting_id not in rand_numbers:
+        rand_numbers.add(meeting_id)
+        return meeting_id
     else:
         return random_number()
 
 async def cache_appointment(data: dict):
-    appointment_key = f"appointment:{data['appointment_date']}:{data['CIN']}:{data['appointment_id']}"
+    appointment_key = f"meeting:{data['meeting_date']}:{data['CIN']}:{data['meeting_id']}"
     await client.hset(appointment_key, mapping={
-        "doctor_name": data['doctor_name'],
-        "patient_name": data['patient_name'],
-        "appointment_date": data['appointment_date'],
-        "appointment_time": data['appointment_time'],
+        "user_name": data['user_name'],
+        "meeting_date": data['meeting_date'],
+        "meeting_time": data['meeting_time'],
         "CIN": data['CIN'],
         "status": data['status'],
-        "appointment_id": data['appointment_id']
+        "meeting_id": data['meeting_id']
     })
     await client.expire(appointment_key, 8 * 24 * 60 * 60)  # Cache for 7 days
-    print("Appointment cached successfully")
+    print("Meeting cached successfully")
 
 async def get_cached_appointments(data: dict):
-    keys = await client.keys(f"appointment:{data['appointment_date']}:{data['CIN']}*")
+    keys = await client.keys(f"meeting:{data['meeting_date']}:{data['CIN']}*")
     # print(keys) #debugging
-    appointments = []
+    meetings = []
     for key in keys:
         cached_data = await client.hgetall(key)
         if cached_data:
-            appointments.append(cached_data)
-    if appointments:
-        # print(appointments) #debugging
-        print("Appointments fetched from cache")
-        return appointments
+            meetings.append(cached_data)
+    if meetings:
+        # print(meetings) #debugging
+        print("Meetings fetched from cache")
+        return meetings
     return None
 
 async def delete_cached_appointment(data: dict):
-    keys = await client.keys(f"appointment:{data['appointment_date']}:{data['CIN']}:{data['appointment_id']}")
+    keys = await client.keys(f"meeting:{data['meeting_date']}:{data['CIN']}:{data['meeting_id']}")
     for key in keys:
         await client.delete(key)
-    print("Appointment deleted from cache")
+    print("Meeting deleted from cache")
     return 0
 
 async def insert_in_db(form: dict):
-            form["appointment_id"] = random_number() # generate random appointment id
+            form["meeting_id"] = random_number() # generate random meeting id
             form["status"] = "false" # set status to false
 
-            new_appointment = await conn.booking.appointment.insert_one(form)
-            count_doc = await conn.booking.appointment.count_documents({
-                "doctor_name": form["doctor_name"],
+            new_appointment = await conn.booking.meeting.insert_one(form)
+            count_doc = await conn.booking.meeting.count_documents({
+                "user_name": form["user_name"],
                 "CIN": form["CIN"],
-                "appointment_date": form["appointment_date"]
+                "meeting_date": form["meeting_date"]
             })
-            await conn.booking.appointment.update_one({
+            await conn.booking.meeting.update_one({
                 "_id": new_appointment.inserted_id
             }, {
                 "$set": {
@@ -127,9 +126,9 @@ async def insert_in_db(form: dict):
 
             
             if not new_appointment.inserted_id:
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to book appointment")
-            print("Appointment booked successfully") #debugging
-            # data caching after all the validation are done and appointment is booked
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to book meeting")
+            print("Meeting booked successfully") #debugging
+            # data caching after all the validation are done and meeting is booked
             await cache_appointment(form)
             return (form)
 
@@ -140,15 +139,15 @@ async def set_appointment_slot(cin: str, date: str, form: dict):
                       for k, v in form.items()}
     await client.hset(appointment_key, mapping=redis_data)
     await client.expire(appointment_key, 8 * 24 * 60 * 60)  # Cache for 7 days
-    logger.info(f"Appointment slot cached successfully for {cin} on {date}")
-    print("Free appointment slot cached successfully")
+    logger.info(f"Meeting slot cached successfully for {cin} on {date}")
+    print("Free meeting slot cached successfully")
 
 
 async def get_appointment_slot(date: str, cin: str):
     appointment_key = f"appointment_available_slot:{date}:{cin}"
     cached_data = await client.hgetall(appointment_key)
     if cached_data:
-        print("Appointment slots fetched from cache")
+        print("Meeting slots fetched from cache")
         return {
             "CIN": cached_data["CIN"],
             "date": cached_data["date"],
@@ -160,7 +159,7 @@ async def get_appointment_slot(date: str, cin: str):
             "available_slots": json.loads(cached_data["available_slots"])
         }
     else:
-        print("No appointment slots available in cache")
+        print("No meeting slots available in cache")
         return None
     
 async def get_busy_date(cin: str):
