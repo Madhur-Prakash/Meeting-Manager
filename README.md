@@ -89,8 +89,7 @@ appointment-booking/
 │   │   └── models.py  # models
 │   ├── src
 │   │   ├── __init__.py  # initializes package
-│   │   ├── doctor_side.py
-│   │   └── patient_side.py
+│   │   └── meeting.py
 │   ├── templates
 │   │   ├── cached_appointment.html
 │   │   ├── doc.html
