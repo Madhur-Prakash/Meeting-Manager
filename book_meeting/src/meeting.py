@@ -102,10 +102,10 @@ async def book_meeting(data: models.Booking):
         
         if cached_data:
             # Check if user exists
-            doctor_meeting = await conn.auth.user.find_one({
+            user_meeting = await conn.auth.user.find_one({
             "full_name": form_dict["user_name"],
             "CIN": form_dict["CIN"]})
-            if not doctor_meeting:
+            if not user_meeting:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
         
             # check if user exist
@@ -132,11 +132,11 @@ async def book_meeting(data: models.Booking):
         print("cache returned None")
 
         # Check if user exists
-        doctor_meeting = await conn.auth.user.find_one({
+        user_meeting = await conn.auth.user.find_one({
             "full_name": form_dict["user_name"],
             "CIN": form_dict["CIN"]
         })
-        if not doctor_meeting:
+        if not user_meeting:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
         
         # check if user exist
@@ -172,7 +172,7 @@ async def book_meeting(data: models.Booking):
                         <td align="center">
                             <h2 style="color: #2C3E50;">Meeting Confirmation</h2>
                             <p style="color: #555; font-size: 16px;">Dear <strong>{form_dict['user_name']}</strong>,</p>
-                            <p style="color: #555; font-size: 16px;">Thank you for booking your meeting with <strong>CuraDocs</strong>. Below are your meeting details:</p>
+                            <p style="color: #555; font-size: 16px;">Thank you for booking your meeting with <strong>Meet</strong>. Below are your meeting details:</p>
                         </td>
                     </tr>
                     <tr>
@@ -180,7 +180,7 @@ async def book_meeting(data: models.Booking):
                             <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">User:</td>
-                                    <td style="color: #555; font-size: 16px;">Dr. {form_dict['user_name']}</td>
+                                    <td style="color: #555; font-size: 16px;">Dear. {form_dict['user_name']}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Date:</td>
@@ -202,12 +202,12 @@ async def book_meeting(data: models.Booking):
                     <tr>
                         <td align="center" style="padding-top: 20px;">
                             <p style="color: #777; font-size: 14px;">Best regards,</p>
-                            <p style="color: #2C3E50; font-size: 16px; font-weight: bold;">CuraDocs Team</p>
+                            <p style="color: #2C3E50; font-size: 16px; font-weight: bold;">Meet Team</p>
                         </td>
                     </tr>
                     <tr>
                         <td align="center" style="padding-top: 30px; border-top: 1px solid #ddd;">
-                            <p style="color: #888; font-size: 12px;">© 2025 CuraDocs. All rights reserved.</p>
+                            <p style="color: #888; font-size: 12px;">© 2025 Meet. All rights reserved.</p>
                         </td>
                     </tr>
                 </table>
@@ -320,7 +320,7 @@ async def reschedule(data: models.Reschedule_meeting):
                         <td align="center">
                             <h2 style="color: #2C3E50;">Meeting Reschedule Confirmation</h2>
                             <p style="color: #555; font-size: 16px;">Dear <strong>{existing_meeting['user_name']}</strong>,</p>
-                            <p style="color: #555; font-size: 16px;">Your meeting with <strong>CuraDocs</strong> has been successfully rescheduled. Below are your updated meeting details:</p>
+                            <p style="color: #555; font-size: 16px;">Your meeting with <strong>Meet</strong> has been successfully rescheduled. Below are your updated meeting details:</p>
                         </td>
                     </tr>
                     <tr>
@@ -328,7 +328,7 @@ async def reschedule(data: models.Reschedule_meeting):
                             <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">User:</td>
-                                    <td style="color: #555; font-size: 16px;">Dr. {existing_meeting['user_name']}</td>
+                                    <td style="color: #555; font-size: 16px;">Dear. {existing_meeting['user_name']}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Date:</td>
@@ -349,18 +349,18 @@ async def reschedule(data: models.Reschedule_meeting):
                         <td>
                             <p style="color: #555; font-size: 16px;">Please arrive at least <strong>15 minutes</strong> before your scheduled meeting.</p>
                             <p style="color: #555; font-size: 16px;">If you need any further assistance, feel free to contact us.</p>
-                            <p style="color: #555; font-size: 16px;">We appreciate your trust in CuraDocs and look forward to serving you.</p>
+                            <p style="color: #555; font-size: 16px;">We appreciate your trust in Meet and look forward to serving you.</p>
                         </td>
                     </tr>
                     <tr>
                         <td align="center" style="padding-top: 20px;">
                             <p style="color: #777; font-size: 14px;">Best regards,</p>
-                            <p style="color: #2C3E50; font-size: 16px; font-weight: bold;">CuraDocs Team</p>
+                            <p style="color: #2C3E50; font-size: 16px; font-weight: bold;">Meet Team</p>
                         </td>
                     </tr>
                     <tr>
                         <td align="center" style="padding-top: 30px; border-top: 1px solid #ddd;">
-                            <p style="color: #888; font-size: 12px;">© 2025 CuraDocs. All rights reserved.</p>
+                            <p style="color: #888; font-size: 12px;">© 2025 Meet. All rights reserved.</p>
                         </td>
                     </tr>
                 </table>
@@ -406,7 +406,7 @@ async def reschedule(data: models.Reschedule_meeting):
                         <td align="center">
                             <h2 style="color: #2C3E50;">Meeting Reschedule Confirmation</h2>
                             <p style="color: #555; font-size: 16px;">Dear <strong>{existing_meeting['user_name']}</strong>,</p>
-                            <p style="color: #555; font-size: 16px;">Your meeting with <strong>CuraDocs</strong> has been successfully rescheduled. Below are your updated meeting details:</p>
+                            <p style="color: #555; font-size: 16px;">Your meeting with <strong>Meet</strong> has been successfully rescheduled. Below are your updated meeting details:</p>
                         </td>
                     </tr>
                     <tr>
@@ -414,7 +414,7 @@ async def reschedule(data: models.Reschedule_meeting):
                             <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">User:</td>
-                                    <td style="color: #555; font-size: 16px;">Dr. {existing_meeting['user_name']}</td>
+                                    <td style="color: #555; font-size: 16px;">Dear. {existing_meeting['user_name']}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Date:</td>
@@ -435,18 +435,18 @@ async def reschedule(data: models.Reschedule_meeting):
                         <td>
                             <p style="color: #555; font-size: 16px;">Please arrive at least <strong>15 minutes</strong> before your scheduled meeting.</p>
                             <p style="color: #555; font-size: 16px;">If you need any further assistance, feel free to contact us.</p>
-                            <p style="color: #555; font-size: 16px;">We appreciate your trust in CuraDocs and look forward to serving you.</p>
+                            <p style="color: #555; font-size: 16px;">We appreciate your trust in Meet and look forward to serving you.</p>
                         </td>
                     </tr>
                     <tr>
                         <td align="center" style="padding-top: 20px;">
                             <p style="color: #777; font-size: 14px;">Best regards,</p>
-                            <p style="color: #2C3E50; font-size: 16px; font-weight: bold;">CuraDocs Team</p>
+                            <p style="color: #2C3E50; font-size: 16px; font-weight: bold;">Meet Team</p>
                         </td>
                     </tr>
                     <tr>
                         <td align="center" style="padding-top: 30px; border-top: 1px solid #ddd;">
-                            <p style="color: #888; font-size: 12px;">© 2025 CuraDocs. All rights reserved.</p>
+                            <p style="color: #888; font-size: 12px;">© 2025 Meet. All rights reserved.</p>
                         </td>
                     </tr>
                 </table>
@@ -722,7 +722,7 @@ async def get_busy_dates_api(CIN: str):
                 "busy_dates": [], 
                 "date_range": {"from": today_str, "to": end_date_str},
                 "message": "No meetings found",
-                "debug_doctor_keys": list(user.keys())
+                "user_keys": list(user.keys())
             }
             await set_busy_date(CIN, result)
             return result
@@ -749,7 +749,7 @@ async def get_busy_dates_api(CIN: str):
                 "busy_dates": [], 
                 "date_range": {"from": today_str, "to": end_date_str},
                 "message": "No working time configured",
-                "debug_doctor_keys": list(user.keys())
+                "user_keys": list(user.keys())
             }
             await set_busy_date(CIN, result)
             return result
