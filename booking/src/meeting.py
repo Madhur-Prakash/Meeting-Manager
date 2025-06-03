@@ -91,8 +91,8 @@ async def book_appointment(data: models.Booking):
             if field not in form_dict:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
         
-        user = await conn.public_profile_data.user.find_one({"CIN": form_dict["CIN"]})
-        if not user:
+        user_time = await conn.public_profile_data.user.find_one({"CIN": form_dict["CIN"]})
+        if not user_time:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
 
         # Check if data is cached
@@ -118,7 +118,7 @@ async def book_appointment(data: models.Booking):
                 existing_appt_datetime = datetime.strptime(f"{existing_appt['meeting_date']} {existing_appt['meeting_time']}",  "%d-%m-%Y %H:%M")
                 
                 # Check if new meeting is within 30 minutes before or after an existing meeting
-                if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=int(user['avg_appointment_duration'])):
+                if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=int(user_time['avg_appointment_duration'])):
                     print("Data checked in cache for meeting")
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Meeting slot is too close to an existing meeting. Please choose a different time.")   
             
@@ -157,7 +157,7 @@ async def book_appointment(data: models.Booking):
             existing_appt_datetime = datetime.strptime(f"{existing_appt['meeting_date']} {existing_appt['meeting_time']}",  "%d-%m-%Y %H:%M")
             
             # Check if new meeting is within 30 minutes before or after an existing meeting
-            if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=int(user['avg_appointment_duration'])):
+            if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=int(user_time['avg_appointment_duration'])):
                 print("db hit for meeting")
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Meeting slot is too close to an existing meeting. Please choose a different time.")
 
@@ -914,7 +914,7 @@ async def get_busy_dates_api(CIN: str):
         
         for meeting in filtered_appointments:
             meeting_date = meeting.get('meeting_date')
-            appointment_status = meeting.get('status')
+            # appointment_status = meeting.get('status')
             
             # print(f"Processing meeting: date={meeting_date}, status={appointment_status}")
             

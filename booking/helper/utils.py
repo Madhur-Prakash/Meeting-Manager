@@ -121,7 +121,7 @@ async def insert_in_db(form: dict):
                 "_id": new_appointment.inserted_id
             }, {
                 "$set": {
-                    "number_of_appointments": count_doc
+                    "number_of_meetings": count_doc
             }}) 
 
             
