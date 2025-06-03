@@ -29,7 +29,7 @@ NO_REPLY_EMAIL = os.getenv("NO_REPLY_EMAIL")
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 def setup_logging():
-    logger = logging.getLogger("appointment_log") # create logger
+    logger = logging.getLogger("meeting_log") # create logger
     if not logger.hasHandlers(): # check if handlers already exist
         logger.setLevel(logging.INFO) # set log level
 
@@ -73,9 +73,9 @@ def  random_number():
     else:
         return random_number()
 
-async def cache_appointment(data: dict):
-    appointment_key = f"meeting:{data['meeting_date']}:{data['CIN']}:{data['meeting_id']}"
-    await client.hset(appointment_key, mapping={
+async def cache_meeting(data: dict):
+    meeting_key = f"meeting:{data['meeting_date']}:{data['CIN']}:{data['meeting_id']}"
+    await client.hset(meeting_key, mapping={
         "user_name": data['user_name'],
         "meeting_date": data['meeting_date'],
         "meeting_time": data['meeting_time'],
@@ -83,10 +83,10 @@ async def cache_appointment(data: dict):
         "status": data['status'],
         "meeting_id": data['meeting_id']
     })
-    await client.expire(appointment_key, 8 * 24 * 60 * 60)  # Cache for 7 days
+    await client.expire(meeting_key, 8 * 24 * 60 * 60)  # Cache for 7 days
     print("Meeting cached successfully")
 
-async def get_cached_appointments(data: dict):
+async def get_cached_meetings(data: dict):
     keys = await client.keys(f"meeting:{data['meeting_date']}:{data['CIN']}*")
     # print(keys) #debugging
     meetings = []
@@ -100,7 +100,7 @@ async def get_cached_appointments(data: dict):
         return meetings
     return None
 
-async def delete_cached_appointment(data: dict):
+async def delete_cached_meeting(data: dict):
     keys = await client.keys(f"meeting:{data['meeting_date']}:{data['CIN']}:{data['meeting_id']}")
     for key in keys:
         await client.delete(key)
@@ -111,41 +111,41 @@ async def insert_in_db(form: dict):
             form["meeting_id"] = random_number() # generate random meeting id
             form["status"] = "false" # set status to false
 
-            new_appointment = await conn.booking.meeting.insert_one(form)
+            new_meeting = await conn.booking.meeting.insert_one(form)
             count_doc = await conn.booking.meeting.count_documents({
                 "user_name": form["user_name"],
                 "CIN": form["CIN"],
                 "meeting_date": form["meeting_date"]
             })
             await conn.booking.meeting.update_one({
-                "_id": new_appointment.inserted_id
+                "_id": new_meeting.inserted_id
             }, {
                 "$set": {
                     "number_of_meetings": count_doc
             }}) 
 
             
-            if not new_appointment.inserted_id:
+            if not new_meeting.inserted_id:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to book meeting")
             print("Meeting booked successfully") #debugging
             # data caching after all the validation are done and meeting is booked
-            await cache_appointment(form)
+            await cache_meeting(form)
             return (form)
 
 
-async def set_appointment_slot(cin: str, date: str, form: dict):
-    appointment_key = f"appointment_available_slot:{form['date']}:{form['CIN']}"
+async def set_meeting_slot(cin: str, date: str, form: dict):
+    meeting_key = f"meeting_available_slot:{form['date']}:{form['CIN']}"
     redis_data = {k: json.dumps(v, cls=CustomJSONEncoder) if isinstance(v, (dict, list)) else v 
                       for k, v in form.items()}
-    await client.hset(appointment_key, mapping=redis_data)
-    await client.expire(appointment_key, 8 * 24 * 60 * 60)  # Cache for 7 days
+    await client.hset(meeting_key, mapping=redis_data)
+    await client.expire(meeting_key, 8 * 24 * 60 * 60)  # Cache for 7 days
     logger.info(f"Meeting slot cached successfully for {cin} on {date}")
     print("Free meeting slot cached successfully")
 
 
-async def get_appointment_slot(date: str, cin: str):
-    appointment_key = f"appointment_available_slot:{date}:{cin}"
-    cached_data = await client.hgetall(appointment_key)
+async def get_meeting_slot(date: str, cin: str):
+    meeting_key = f"meeting_available_slot:{date}:{cin}"
+    cached_data = await client.hgetall(meeting_key)
     if cached_data:
         print("Meeting slots fetched from cache")
         return {
@@ -155,7 +155,7 @@ async def get_appointment_slot(date: str, cin: str):
             "working_days": json.loads(cached_data["working_days"]),
             "holidays": json.loads(cached_data["holidays"]),
             "working_address": json.loads(cached_data["working_address"]),
-            "avg_appointment_duration":cached_data["avg_appointment_duration"],
+            "avg_meeting_duration":cached_data["avg_meeting_duration"],
             "available_slots": json.loads(cached_data["available_slots"])
         }
     else:

@@ -10,7 +10,7 @@ class Booking(BaseModel):
     meeting_time: str = Field(..., title = "Meeting time")
     CIN: str = Field(..., title = "CIN of user")
 
-class Reschedule_Appointment(BaseModel):
+class Reschedule_meeting(BaseModel):
     CIN: str = Field(..., title = "CIN of user")
     meeting_date: str = Field(..., title = "Meeting date")
     meeting_time: str = Field(..., title = "Meeting time")

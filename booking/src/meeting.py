@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from models import models
 import traceback
 from booking.config.redis_config import client
-from ..helper.utils import get_busy_date, setup_logging, cache_appointment, get_cached_appointments, insert_in_db, delete_cached_appointment, send_email, send_email_ses, create_new_log, set_appointment_slot, get_appointment_slot, set_busy_date
+from ..helper.utils import get_busy_date, setup_logging, cache_meeting, get_cached_meetings, insert_in_db, delete_cached_meeting, send_email, send_email_ses, create_new_log, set_meeting_slot, get_meeting_slot, set_busy_date
 from ..config.database import conn
 
 meet = APIRouter()
@@ -24,19 +24,19 @@ async def get_all(email: str):
         cache_keys = await client.keys(f"meeting:{email}:*")
         if cache_keys:
             print("Cache data found")
-            cached_appointments = []
+            cached_meetings = []
             for key in cache_keys:
-                appointment_data = await client.hgetall(key)
-                if appointment_data:
-                    cached_appointments.append(appointment_data)
-            return cached_appointments
+                meeting_data = await client.hgetall(key)
+                if meeting_data:
+                    cached_meetings.append(meeting_data)
+            return cached_meetings
         
         print("No cache data found") #debugging
         meetings =  await conn.booking.meeting.find({"email": email}).sort([("meeting_date", 1), ("meeting_time", 1)]).to_list(length=None)
         print(meetings) #debugging
         meet = []
         for meeting in meetings:
-            appointment_data = {
+            meeting_data = {
                 "user_name": meeting["user_name"],
                 "meeting_date": meeting["meeting_date"],
                 "meeting_time": meeting["meeting_time"],
@@ -45,10 +45,10 @@ async def get_all(email: str):
                 "meeting_id": meeting["meeting_id"],
                 "number_of_meetings": meeting["number_of_meetings"]
             }
-            meet.append(appointment_data)
+            meet.append(meeting_data)
             
             # Cache the meeting
-            await client.hset(f"meeting:{email}:{meeting['_id']}", mapping=appointment_data)
+            await client.hset(f"meeting:{email}:{meeting['_id']}", mapping=meeting_data)
             await client.expire(f"meeting:{email}:{meeting['_id']}", 3600)  # Set expiration time to 1 hour
         
         return meet
@@ -62,7 +62,7 @@ async def get_all(email: str):
 
 
 @meet.get("/user/{email}/delete_cached_meetings", status_code=status.HTTP_200_OK)
-async def delete_cached_appointments(email: str):
+async def delete_cached_meetings(email: str):
     try:
         cache_keys = await client.keys(f"meeting:{email}:*")
         if cache_keys:
@@ -80,7 +80,7 @@ async def delete_cached_appointments(email: str):
 
 
 @meet.post("/user/meeting/book", status_code=status.HTTP_302_FOUND)
-async def book_appointment(data: models.Booking):
+async def book_meeting(data: models.Booking):
     try:
         form = dict(data)
         form_dict = dict(form)
@@ -96,16 +96,16 @@ async def book_appointment(data: models.Booking):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
 
         # Check if data is cached
-        cached_data = await get_cached_appointments(form_dict)
+        cached_data = await get_cached_meetings(form_dict)
         # Convert meeting time to datetime for comparisons
-        appointment_datetime = datetime.strptime(f"{form_dict['meeting_date']} {form_dict['meeting_time']}", "%d-%m-%Y %H:%M")
+        meeting_datetime = datetime.strptime(f"{form_dict['meeting_date']} {form_dict['meeting_time']}", "%d-%m-%Y %H:%M")
         
         if cached_data:
             # Check if user exists
-            doctor_appointment = await conn.auth.user.find_one({
+            doctor_meeting = await conn.auth.user.find_one({
             "full_name": form_dict["user_name"],
             "CIN": form_dict["CIN"]})
-            if not doctor_appointment:
+            if not doctor_meeting:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
         
             # check if user exist
@@ -114,11 +114,11 @@ async def book_appointment(data: models.Booking):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         
             # compare the cached meeting time with the new meeting time
-            for existing_appt in cached_data:
-                existing_appt_datetime = datetime.strptime(f"{existing_appt['meeting_date']} {existing_appt['meeting_time']}",  "%d-%m-%Y %H:%M")
+            for existing_meet in cached_data:
+                existing_meet_datetime = datetime.strptime(f"{existing_meet['meeting_date']} {existing_meet['meeting_time']}",  "%d-%m-%Y %H:%M")
                 
                 # Check if new meeting is within 30 minutes before or after an existing meeting
-                if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=int(user_time['avg_appointment_duration'])):
+                if abs(meeting_datetime - existing_meet_datetime) < timedelta(minutes=int(user_time['avg_meeting_duration'])):
                     print("Data checked in cache for meeting")
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Meeting slot is too close to an existing meeting. Please choose a different time.")   
             
@@ -132,11 +132,11 @@ async def book_appointment(data: models.Booking):
         print("cache returned None")
 
         # Check if user exists
-        doctor_appointment = await conn.auth.user.find_one({
+        doctor_meeting = await conn.auth.user.find_one({
             "full_name": form_dict["user_name"],
             "CIN": form_dict["CIN"]
         })
-        if not doctor_appointment:
+        if not doctor_meeting:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
         
         # check if user exist
@@ -145,19 +145,19 @@ async def book_appointment(data: models.Booking):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         
         # Convert cursor to list using .to_list()
-        existing_appointments = await conn.booking.meeting.find({
+        existing_meetings = await conn.booking.meeting.find({
             "user_name": form_dict["user_name"],
             "meeting_date": form_dict["meeting_date"],
             "CIN": form_dict["CIN"]
         }).to_list(length=None)
 
-        # print("existing app:", existing_appointments)
+        # print("existing app:", existing_meetings)
 
-        for existing_appt in existing_appointments:
-            existing_appt_datetime = datetime.strptime(f"{existing_appt['meeting_date']} {existing_appt['meeting_time']}",  "%d-%m-%Y %H:%M")
+        for existing_meet in existing_meetings:
+            existing_meet_datetime = datetime.strptime(f"{existing_meet['meeting_date']} {existing_meet['meeting_time']}",  "%d-%m-%Y %H:%M")
             
             # Check if new meeting is within 30 minutes before or after an existing meeting
-            if abs(appointment_datetime - existing_appt_datetime) < timedelta(minutes=int(user_time['avg_appointment_duration'])):
+            if abs(meeting_datetime - existing_meet_datetime) < timedelta(minutes=int(user_time['avg_meeting_duration'])):
                 print("db hit for meeting")
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Meeting slot is too close to an existing meeting. Please choose a different time.")
 
@@ -240,7 +240,7 @@ async def book_appointment(data: models.Booking):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
 
 @meet.post("/user/meeting/reschedule", status_code=status.HTTP_302_FOUND)
-async def reschedule(data: models.Reschedule_Appointment):
+async def reschedule(data: models.Reschedule_meeting):
     try:
         form = dict(data)
         form_data = dict(form)
@@ -255,59 +255,59 @@ async def reschedule(data: models.Reschedule_Appointment):
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
 
-        new_appointment_date = form_data["meeting_date"]
-        new_appointment_time = form_data["meeting_time"]
+        new_meeting_date = form_data["meeting_date"]
+        new_meeting_time = form_data["meeting_time"]
         reason = form_data["reason"]
 
-        new_appointment_datetime = datetime.strptime(f"{new_appointment_date} {new_appointment_time}",  "%d-%m-%Y %H:%M")
+        new_meeting_datetime = datetime.strptime(f"{new_meeting_date} {new_meeting_time}",  "%d-%m-%Y %H:%M")
         
         # Check if the new meeting date is in the past
-        # if new_appointment_datetime < datetime.now().isoformat():
+        # if new_meeting_datetime < datetime.now().isoformat():
         #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Meeting date cannot be in the past")
 
-        existing_appointment = await conn.booking.meeting.find_one({"meeting_id": form_data['meeting_id']})
-        if not existing_appointment:
+        existing_meeting = await conn.booking.meeting.find_one({"meeting_id": form_data['meeting_id']})
+        if not existing_meeting:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
         # Check if the slot is already booked
-        if(existing_appointment['meeting_date'] == new_appointment_date and existing_appointment['meeting_time'] == new_appointment_time):
+        if(existing_meeting['meeting_date'] == new_meeting_date and existing_meeting['meeting_time'] == new_meeting_time):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Meeting slot is already booked. Please choose a different time.")
 
-        existing_appointment_time = await conn.booking.meeting.find({
-            "meeting_date": new_appointment_date}).to_list(length=None)
-        print("existing_appointment_time", existing_appointment_time)
-        for existing_appo_time in existing_appointment_time:
-            existing_time = datetime.strptime(f"{existing_appo_time['meeting_date']} {existing_appo_time['meeting_time']}", "%d-%m-%Y %H:%M")
+        existing_meeting_time = await conn.booking.meeting.find({
+            "meeting_date": new_meeting_date}).to_list(length=None)
+        print("existing_meeting_time", existing_meeting_time)
+        for existing_meet_time in existing_meeting_time:
+            existing_time = datetime.strptime(f"{existing_meet_time['meeting_date']} {existing_meet_time['meeting_time']}", "%d-%m-%Y %H:%M")
 
             # Check if new meeting is within 30 minutes before or after an existing meeting
-            if abs(existing_time - new_appointment_datetime) < timedelta(minutes=int(user['avg_appointment_duration'])):
+            if abs(existing_time - new_meeting_datetime) < timedelta(minutes=int(user['avg_meeting_duration'])):
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Meeting slot is too close to an existing meeting. Please choose a different time.")
             
 #  ************************************fixing the number_of_meetings fiels in the database****************************************
 
-        if(existing_appointment['meeting_date'] == new_appointment_date):
+        if(existing_meeting['meeting_date'] == new_meeting_date):
             await conn.booking.meeting.count_documents({
-                "user_name": existing_appointment["user_name"],
-                "CIN": existing_appointment["CIN"],
-                "meeting_date": new_appointment_date
+                "user_name": existing_meeting["user_name"],
+                "CIN": existing_meeting["CIN"],
+                "meeting_date": new_meeting_date
             })
             # Update the current meeting's date and time
             await conn.booking.meeting.update_one(
                 {"meeting_id": form_data['meeting_id']},
                 {"$set": {
-                    "meeting_date": new_appointment_date,
-                    "meeting_time": new_appointment_time}})
+                    "meeting_date": new_meeting_date,
+                    "meeting_time": new_meeting_time}})
             
             updated_mongo_doc = {
-                "user_name": existing_appointment["user_name"],
-                "CIN": existing_appointment["CIN"],
-                "email": existing_appointment["email"],
-                "meeting_date": new_appointment_date,
-                "meeting_time": new_appointment_time,
-                "status": existing_appointment["status"],
+                "user_name": existing_meeting["user_name"],
+                "CIN": existing_meeting["CIN"],
+                "email": existing_meeting["email"],
+                "meeting_date": new_meeting_date,
+                "meeting_time": new_meeting_time,
+                "status": existing_meeting["status"],
                 "meeting_id": form_data['meeting_id']}
             
-            await cache_appointment(updated_mongo_doc) # updating the cache with the new meeting details
-            await delete_cached_appointment(existing_appointment) # deleting the old meeting from the cache
+            await cache_meeting(updated_mongo_doc) # updating the cache with the new meeting details
+            await delete_cached_meeting(existing_meeting) # deleting the old meeting from the cache
 
             html_body = f"""
 <html>
@@ -319,7 +319,7 @@ async def reschedule(data: models.Reschedule_Appointment):
                     <tr>
                         <td align="center">
                             <h2 style="color: #2C3E50;">Meeting Reschedule Confirmation</h2>
-                            <p style="color: #555; font-size: 16px;">Dear <strong>{existing_appointment['user_name']}</strong>,</p>
+                            <p style="color: #555; font-size: 16px;">Dear <strong>{existing_meeting['user_name']}</strong>,</p>
                             <p style="color: #555; font-size: 16px;">Your meeting with <strong>CuraDocs</strong> has been successfully rescheduled. Below are your updated meeting details:</p>
                         </td>
                     </tr>
@@ -328,15 +328,15 @@ async def reschedule(data: models.Reschedule_Appointment):
                             <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">User:</td>
-                                    <td style="color: #555; font-size: 16px;">Dr. {existing_appointment['user_name']}</td>
+                                    <td style="color: #555; font-size: 16px;">Dr. {existing_meeting['user_name']}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Date:</td>
-                                    <td style="color: #555; font-size: 16px;">{new_appointment_date}</td>
+                                    <td style="color: #555; font-size: 16px;">{new_meeting_date}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Time:</td>
-                                    <td style="color: #555; font-size: 16px;">{new_appointment_time}</td>
+                                    <td style="color: #555; font-size: 16px;">{new_meeting_time}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Reason for Rescheduling:</td>
@@ -371,7 +371,7 @@ async def reschedule(data: models.Reschedule_Appointment):
 </html>
 """
 
-            sent_mail = send_email(existing_appointment["email"], "Meeting Reschedule Confirmation", html_body, retries=3, delay=5)
+            sent_mail = send_email(existing_meeting["email"], "Meeting Reschedule Confirmation", html_body, retries=3, delay=5)
             if not sent_mail:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 
@@ -380,20 +380,20 @@ async def reschedule(data: models.Reschedule_Appointment):
             return {"message": "Meeting rescheduled successfully", "meeting_id": form_data['meeting_id'], "status": status.HTTP_200_OK}
 
         # If the date has changed, update the number of meetings for the old date
-        elif new_appointment_date != existing_appointment['meeting_date']:
+        elif new_meeting_date != existing_meeting['meeting_date']:
             #  delete the old meeting from the database
             await conn.booking.meeting.delete_one({"meeting_id": form_data['meeting_id']})
 
             #  delete the old meeting from the cache
-            await delete_cached_appointment(existing_appointment)
+            await delete_cached_meeting(existing_meeting)
 
             #  insert the new meeting into the database
             updated_mongo_doc = {
-                "user_name": existing_appointment["user_name"],
-                "CIN": existing_appointment["CIN"],
-                "email": existing_appointment["email"],
-                "meeting_date": new_appointment_date,
-                "meeting_time": new_appointment_time}
+                "user_name": existing_meeting["user_name"],
+                "CIN": existing_meeting["CIN"],
+                "email": existing_meeting["email"],
+                "meeting_date": new_meeting_date,
+                "meeting_time": new_meeting_time}
             
             html_body = f"""
 <html>
@@ -405,7 +405,7 @@ async def reschedule(data: models.Reschedule_Appointment):
                     <tr>
                         <td align="center">
                             <h2 style="color: #2C3E50;">Meeting Reschedule Confirmation</h2>
-                            <p style="color: #555; font-size: 16px;">Dear <strong>{existing_appointment['user_name']}</strong>,</p>
+                            <p style="color: #555; font-size: 16px;">Dear <strong>{existing_meeting['user_name']}</strong>,</p>
                             <p style="color: #555; font-size: 16px;">Your meeting with <strong>CuraDocs</strong> has been successfully rescheduled. Below are your updated meeting details:</p>
                         </td>
                     </tr>
@@ -414,15 +414,15 @@ async def reschedule(data: models.Reschedule_Appointment):
                             <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">User:</td>
-                                    <td style="color: #555; font-size: 16px;">Dr. {existing_appointment['user_name']}</td>
+                                    <td style="color: #555; font-size: 16px;">Dr. {existing_meeting['user_name']}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Date:</td>
-                                    <td style="color: #555; font-size: 16px;">{new_appointment_date}</td>
+                                    <td style="color: #555; font-size: 16px;">{new_meeting_date}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Time:</td>
-                                    <td style="color: #555; font-size: 16px;">{new_appointment_time}</td>
+                                    <td style="color: #555; font-size: 16px;">{new_meeting_time}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Reason for Rescheduling:</td>
@@ -457,14 +457,14 @@ async def reschedule(data: models.Reschedule_Appointment):
 </html>
 """
 
-            sent_mail = send_email(existing_appointment["email"], "Meeting Reschedule Confirmation", html_body, retries=3, delay=5)
+            sent_mail = send_email(existing_meeting["email"], "Meeting Reschedule Confirmation", html_body, retries=3, delay=5)
             if not sent_mail:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 
-            new_appointment = await insert_in_db(updated_mongo_doc)
-            create_new_log("info", f"Meeting rescheduled successfully: {new_appointment['meeting_id']}", "/api/backend/Meeting")
-            logger.info(f"Meeting rescheduled successfully: {new_appointment['meeting_id']}")
-            return {"message": "Meeting rescheduled successfully", "meeting_id": new_appointment['meeting_id'], "status": status.HTTP_200_OK}
+            new_meeting = await insert_in_db(updated_mongo_doc)
+            create_new_log("info", f"Meeting rescheduled successfully: {new_meeting['meeting_id']}", "/api/backend/Meeting")
+            logger.info(f"Meeting rescheduled successfully: {new_meeting['meeting_id']}")
+            return {"message": "Meeting rescheduled successfully", "meeting_id": new_meeting['meeting_id'], "status": status.HTTP_200_OK}
     
 #****************************************************************************************************************************************************
     except Exception as e:
@@ -476,14 +476,14 @@ async def reschedule(data: models.Reschedule_Appointment):
 
 
 @meet.post("/user/meeting/cancel", status_code=status.HTTP_302_FOUND)
-async def cancel_appointment(data: models.cancel):
+async def cancel_meeting(data: models.cancel):
     try:
         form = dict(data)
         meeting = await conn.booking.meeting.find_one({"meeting_id": form["meeting_id"]})
         if not meeting:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")  
         await conn.booking.meeting.delete_one({"meeting_id": form["meeting_id"]})
-        await delete_cached_appointment(meeting)
+        await delete_cached_meeting(meeting)
         create_new_log("info", f"Meeting cancelled successfully: {form['meeting_id']}", "/api/backend/Meeting")
         logger.info(f"Meeting cancelled successfully: {form['meeting_id']}")
         return {"message": "Meeting cancelled successfully", "meeting_id": form["meeting_id"], "status": status.HTTP_302_FOUND}
@@ -508,7 +508,7 @@ async def get_available_slots(CIN: str, date: str):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date format. Please use DD-MM-YYYY")
         
         # Check cache first
-        cache_data = await get_appointment_slot(date_str, CIN)
+        cache_data = await get_meeting_slot(date_str, CIN)
         if cache_data:
             logger.info(f"Cache hit for available slots: {CIN} on {date_str}")
             create_new_log("info", f"Cache hit for available slots: {CIN} on {date_str}", "/api/backend/Meeting")
@@ -523,7 +523,7 @@ async def get_available_slots(CIN: str, date: str):
 
         # Get user's working time configuration
         try:
-            avg_appointment_duration = int(user['avg_appointment_duration'])  # in minutes
+            avg_meeting_duration = int(user['avg_meeting_duration'])  # in minutes
             
             if 'working_time' not in user or not user['working_time']:
                 raise KeyError("Working time not configured for user")
@@ -592,8 +592,8 @@ async def get_available_slots(CIN: str, date: str):
         unavailable_slots = []
         for meeting in meetings:
             meeting_time = meeting['meeting_time']
-            appointment_datetime = datetime.strptime(f"{date_str} {meeting_time}", "%d-%m-%Y %H:%M")
-            unavailable_slots.append(appointment_datetime)
+            meeting_datetime = datetime.strptime(f"{date_str} {meeting_time}", "%d-%m-%Y %H:%M")
+            unavailable_slots.append(meeting_datetime)
         
         # Generate all possible time slots based on all working periods
         all_slots = []
@@ -609,15 +609,15 @@ async def get_available_slots(CIN: str, date: str):
                 
                 # First part of the day (before break)
                 current_slot = start_datetime
-                while current_slot + timedelta(minutes=avg_appointment_duration) <= start_break_datetime:
+                while current_slot + timedelta(minutes=avg_meeting_duration) <= start_break_datetime:
                     all_slots.append(current_slot)
-                    current_slot = current_slot + timedelta(minutes=avg_appointment_duration)
+                    current_slot = current_slot + timedelta(minutes=avg_meeting_duration)
                 
                 # Second part of the day (after break)
                 current_slot = end_break_datetime
-                while current_slot + timedelta(minutes=avg_appointment_duration) <= end_datetime:
+                while current_slot + timedelta(minutes=avg_meeting_duration) <= end_datetime:
                     all_slots.append(current_slot)
-                    current_slot = current_slot + timedelta(minutes=avg_appointment_duration)
+                    current_slot = current_slot + timedelta(minutes=avg_meeting_duration)
             except Exception as e:
                 logger.warning(f"Error processing time slot {i}: {str(e)}")
                 continue
@@ -653,12 +653,12 @@ async def get_available_slots(CIN: str, date: str):
             "working_days": [day.capitalize() for day in working_days] if working_days else [],
             "holidays": [day.capitalize() for day in holidays] if holidays else [],
             "working_address": working_address,
-            "avg_appointment_duration": avg_appointment_duration,
+            "avg_meeting_duration": avg_meeting_duration,
             "available_slots": available_slots
         }
         
         # Cache the result
-        await set_appointment_slot(CIN, date_str, available_dict)
+        await set_meeting_slot(CIN, date_str, available_dict)
 
         return available_dict
     
@@ -671,7 +671,7 @@ async def get_available_slots(CIN: str, date: str):
 @meet.get("/refresh/available_slots/{CIN}/{date}", status_code=status.HTTP_200_OK)
 async def refresh_available_slots(CIN: str, date: str):
     try:
-        await client.delete(f"appointment_available_slot:{date}:{CIN}")
+        await client.delete(f"meeting_available_slot:{date}:{CIN}")
         logger.info(f"Cache cleared for available slots: {CIN} on {date}")
         create_new_log("info", f"Cache cleared for available slots: {CIN} on {date}", "/api/backend/Meeting")
         return {"message": "Cache cleared successfully", "status": status.HTTP_200_OK}
@@ -729,12 +729,12 @@ async def get_busy_dates_api(CIN: str):
         print("total meetings",len(meetings))
         print(f"Found {len(meetings)} total meetings for user {CIN}")
 
-        filtered_appointments = []
+        filtered_meetings = []
         for a in meetings:
             try:
-                appt_date = datetime.strptime(a["meeting_date"], "%d-%m-%Y").date()
-                if today <= appt_date <= end_date:
-                    filtered_appointments.append(a)
+                meet_date = datetime.strptime(a["meeting_date"], "%d-%m-%Y").date()
+                if today <= meet_date <= end_date:
+                    filtered_meetings.append(a)
             except Exception as e:
                 print(f"Invalid date in record: {a.get('meeting_date')} -> {e}")
 
@@ -797,8 +797,8 @@ async def get_busy_dates_api(CIN: str):
         print(f"Final working days for user {CIN}: {working_days}")
         
         # Get average meeting duration
-        avg_appointment_duration = int(user.get('avg_appointment_duration', None))  # Default 30 minutes
-        print(f"Average meeting duration: {avg_appointment_duration}")
+        avg_meeting_duration = int(user.get('avg_meeting_duration', None))  # Default 30 minutes
+        print(f"Average meeting duration: {avg_meeting_duration}")
         
         # Get holidays (array of date strings)
         holidays = working_time[0].get('holidays', [])
@@ -852,7 +852,7 @@ async def get_busy_dates_api(CIN: str):
             
             print(f"Total working minutes: {total_minutes}")
             # Calculate number of meeting slots
-            slots = int(total_minutes // avg_appointment_duration) if avg_appointment_duration > 0 else 0
+            slots = int(total_minutes // avg_meeting_duration) if avg_meeting_duration > 0 else 0
             print(f"Calculated slots per day: {slots}")
             return slots
 
@@ -908,30 +908,30 @@ async def get_busy_dates_api(CIN: str):
             await set_busy_date(CIN, result)
             return result
 
-        # Group filtered_appointments by date (only for dates within range)
-        appointments_by_date = defaultdict(int)
-        valid_appointments = 0
+        # Group filtered_meetings by date (only for dates within range)
+        meetings_by_date = defaultdict(int)
+        valid_meetings = 0
         
-        for meeting in filtered_appointments:
+        for meeting in filtered_meetings:
             meeting_date = meeting.get('meeting_date')
-            # appointment_status = meeting.get('status')
+            # meeting_status = meeting.get('status')
             
-            # print(f"Processing meeting: date={meeting_date}, status={appointment_status}")
+            # print(f"Processing meeting: date={meeting_date}, status={meeting_status}")
             
             if meeting_date and is_date_in_range(meeting_date):
-                # For now, count all filtered_appointments regardless of status for debugging
-                appointments_by_date[meeting_date] += 1
-                valid_appointments += 1
+                # For now, count all filtered_meetings regardless of status for debugging
+                meetings_by_date[meeting_date] += 1
+                valid_meetings += 1
                 # print(f"Counted meeting for date: {meeting_date}")
 
-        print(f"Valid filtered_appointments within range: {valid_appointments}")
-        print(f"Meetings by date: {dict(appointments_by_date)}")
+        print(f"Valid filtered_meetings within range: {valid_meetings}")
+        print(f"Meetings by date: {dict(meetings_by_date)}")
 
         # Find busy dates within the next 3 months
         busy_dates = []
         
-        for date, appointment_count in appointments_by_date.items():
-            print(f"Processing date: {date} with {appointment_count} filtered_appointments")
+        for date, meeting_count in meetings_by_date.items():
+            print(f"Processing date: {date} with {meeting_count} filtered_meetings")
             
             # Skip if date is a holiday
             if date in holidays:
@@ -951,11 +951,11 @@ async def get_busy_dates_api(CIN: str):
                 print(f"Skipping non-working day: {date} ({day_name})")
                 continue
             
-            # Check if filtered_appointments equal or exceed available slots
-            print(f"Comparing {appointment_count} filtered_appointments vs {max_slots_per_day} max slots")
-            if appointment_count >= max_slots_per_day:
+            # Check if filtered_meetings equal or exceed available slots
+            print(f"Comparing {meeting_count} filtered_meetings vs {max_slots_per_day} max slots")
+            if meeting_count >= max_slots_per_day:
                 busy_dates.append(date)
-                logger.info(f"BUSY DATE FOUND: {date} ({appointment_count}/{max_slots_per_day} slots)")
+                logger.info(f"BUSY DATE FOUND: {date} ({meeting_count}/{max_slots_per_day} slots)")
 
         # Sort busy dates
         def sort_date(date_str):
@@ -995,7 +995,7 @@ async def get_busy_dates_api(CIN: str):
                 "from": today_str,
                 "to": end_date_str
             },
-            "appointments_by_date": dict(appointments_by_date)
+            "meetings_by_date": dict(meetings_by_date)
         }
         
         # Cache the result
@@ -1043,25 +1043,25 @@ async def refresh_busy_dates(CIN: str):
 
 
 
-@meet.get("/user/previous_appointments/{email}", status_code=status.HTTP_200_OK)
-async def patient_get_previous_appoitment(email: str):
+@meet.get("/user/previous_meetings/{email}", status_code=status.HTTP_200_OK)
+async def patient_get_previous_meeting(email: str):
     try:
         cache_keys = await client.keys(f"meeting:{email}:*")
         if cache_keys:
             print("Cache data found")
-            cached_appointments = []
+            cached_meetings = []
             for key in cache_keys:
-                appointment_data = await client.hgetall(key)
-                if appointment_data:
-                    cached_appointments.append(appointment_data)
-            return cached_appointments
+                meeting_data = await client.hgetall(key)
+                if meeting_data:
+                    cached_meetings.append(meeting_data)
+            return cached_meetings
         
         print("No cache data found") #debugging
-        meetings =  await conn.booking.temp_appointment.find({"email": email}).sort([("meeting_date", 1), ("meeting_time", 1)]).to_list(length=None)
+        meetings =  await conn.booking.temp_meeting.find({"email": email}).sort([("meeting_date", 1), ("meeting_time", 1)]).to_list(length=None)
         print(meetings) #debugging
         meet = []
         for meeting in meetings:
-            appointment_data = {
+            meeting_data = {
                 "user_name": meeting["user_name"],
                 "meeting_date": meeting["meeting_date"],
                 "meeting_time": meeting["meeting_time"],
@@ -1070,11 +1070,11 @@ async def patient_get_previous_appoitment(email: str):
                 "CIN": meeting["CIN"],
                 "number_of_meetings": meeting["number_of_meetings"]
             }
-            meet.append(appointment_data)
+            meet.append(meeting_data)
             
             # Cache the meeting
-            await client.hset(f"previous_appointment:{email}:{meeting['_id']}", mapping=appointment_data)
-            await client.expire(f"previous_appointment:{email}:{meeting['_id']}", 3600)
+            await client.hset(f"previous_meeting:{email}:{meeting['_id']}", mapping=meeting_data)
+            await client.expire(f"previous_meeting:{email}:{meeting['_id']}", 3600)
         return meet
     
     except Exception as e:
@@ -1085,11 +1085,11 @@ async def patient_get_previous_appoitment(email: str):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
     
 
-@meet.get("/user/refresh/previous_appointments/{email}", status_code=status.HTTP_200_OK)
-async def refresh_previous_appointments(email: str):
+@meet.get("/user/refresh/previous_meetings/{email}", status_code=status.HTTP_200_OK)
+async def refresh_previous_meetings(email: str):
     try:
         # Get all keys that match the pattern
-        cache_keys = await client.keys(f"previous_appointment:{email}:*")
+        cache_keys = await client.keys(f"previous_meeting:{email}:*")
         
         if cache_keys:
             await client.delete(*cache_keys)  # Unpack and delete all matching keys
