@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from booking.src.meeting import meet
+from book_meeting.src.meeting import meet
 from fastapi.middleware.cors import CORSMiddleware
 
 app=FastAPI()

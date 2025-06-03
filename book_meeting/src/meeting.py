@@ -7,7 +7,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from models import models
 import traceback
-from booking.config.redis_config import client
+from book_meeting.config.redis_config import client
 from ..helper.utils import get_busy_date, setup_logging, cache_meeting, get_cached_meetings, insert_in_db, delete_cached_meeting, send_email, send_email_ses, create_new_log, set_meeting_slot, get_meeting_slot, set_busy_date
 from ..config.database import conn
 

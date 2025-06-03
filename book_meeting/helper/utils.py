@@ -3,7 +3,7 @@ import random
 import string
 import logging
 import os
-from booking.models.models import CustomJSONEncoder
+from book_meeting.models.models import CustomJSONEncoder
 from ..config.redis_config import client
 import traceback
 import base64
