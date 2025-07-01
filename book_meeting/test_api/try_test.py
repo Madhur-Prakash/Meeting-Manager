@@ -24,7 +24,7 @@ class APILoadTest(HttpUser):
     def on_start(self):
         """Setup run before starting tests"""
         self.login_data = {
-            "patient_user_name": "mpm",
+            "patient_full_name": "mpm",
             "password": "123456"
         }
     
@@ -131,7 +131,7 @@ class GradualLoadTester:
         """Send a single test request"""
         try:
             response = self.session.post(f"{self.base_url}/patient/login",
-                                       json={"patient_user_name": "mpm",
+                                       json={"patient_full_name": "mpm",
                                             "password": "123456"})
             return response.status_code
         except Exception as e:

@@ -44,20 +44,53 @@ This FastAPI practice project implements a robust user-to-user meeting booking s
    ```bash
    pip install -r requirements.txt
    ```
-5. Configure the `.env` file as necessary for your environment.
+5. Set up MongoDB:
+```bash
+   # Install MongoDB and start the service.
+   ```
 
+6. Set up Redis:
+```bash
+   # Run this command to start Redis Stack in detached mode:
+   docker run -d --name redis-stack -p 6379:6379 -p 8001:8001 redis/redis-stack:latest
+   ```
+7. Set up external logging service:
+   - Clone the repository:
+      ```bash
+      git clone https://github.com/Madhur-Prakash/centralized-logging.git
+      ```
+   - Navigate to the project directory:
+      ```bash
+      cd centralized-logging
+      ```
+   - Create docker image:
+      ```bash
+      docker build -t logging .
+      ```
+   - Run docker:
+      ```bash
+      docker run -d --name logging -p 8000:8000 logging
+      ```
+
+8. Set up .env:
+```plaintext
+SESSION_SECRET_KEY = "YOUR_SESSION_SECRET_KEY"
+NO_REPLY_EMAIL = "YOUR_NO_REPLY_EMAIL"
+```
 ---
 
 ## Usage
 
 1. Start the FastAPI server:
    ```bash
-   uvicorn app:app --reload
+   uvicorn app:app --port 8020 --reload
    ```
 2. Access the API documentation at:
    ```
-   http://127.0.0.1:8000/docs
+   http://127.0.0.1:8020/docs
+   # for detailed docs visit 👉 http://127.0.0.1:8020/scalar
    ```
+   
 3. Use the API to book, reschedule, or cancel meetings, and view past and upcoming meetings.
 
 ---

@@ -37,10 +37,10 @@ async def get_all(email: str):
         meet = []
         for meeting in meetings:
             meeting_data = {
-                "user_name": meeting["user_name"],
+                "full_name": meeting["full_name"],
                 "meeting_date": meeting["meeting_date"],
                 "meeting_time": meeting["meeting_time"],
-                "CIN": meeting["CIN"],
+                "UID": meeting["UID"],
                 "status": meeting["status"],
                 "meeting_id": meeting["meeting_id"],
                 "number_of_meetings": meeting["number_of_meetings"]
@@ -86,12 +86,12 @@ async def book_meeting(data: models.Booking):
         form_dict = dict(form)
         
 
-        required_fields = ["user_name", "CIN", "email", "meeting_date", "meeting_time"]
+        required_fields = ["full_name", "UID", "email", "meeting_date", "meeting_time"]
         for field in required_fields:
             if field not in form_dict:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
         
-        user_time = await conn.public_profile_data.user.find_one({"CIN": form_dict["CIN"]})
+        user_time = await conn.public_profile_data.user.find_one({"UID": form_dict["UID"]})
         if not user_time:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
 
@@ -103,8 +103,8 @@ async def book_meeting(data: models.Booking):
         if cached_data:
             # Check if user exists
             user_meeting = await conn.auth.user.find_one({
-            "full_name": form_dict["user_name"],
-            "CIN": form_dict["CIN"]})
+            "full_name": form_dict["full_name"],
+            "UID": form_dict["UID"]})
             if not user_meeting:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
         
@@ -133,8 +133,8 @@ async def book_meeting(data: models.Booking):
 
         # Check if user exists
         user_meeting = await conn.auth.user.find_one({
-            "full_name": form_dict["user_name"],
-            "CIN": form_dict["CIN"]
+            "full_name": form_dict["full_name"],
+            "UID": form_dict["UID"]
         })
         if not user_meeting:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
@@ -146,9 +146,9 @@ async def book_meeting(data: models.Booking):
         
         # Convert cursor to list using .to_list()
         existing_meetings = await conn.booking.meeting.find({
-            "user_name": form_dict["user_name"],
+            "full_name": form_dict["full_name"],
             "meeting_date": form_dict["meeting_date"],
-            "CIN": form_dict["CIN"]
+            "UID": form_dict["UID"]
         }).to_list(length=None)
 
         # print("existing app:", existing_meetings)
@@ -164,23 +164,23 @@ async def book_meeting(data: models.Booking):
         html_body = f"""
                         <html>
 <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
-    <table width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
+    <table width="100%" cellspaUIDg="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
         <tr>
             <td align="center">
-                <table width="600px" cellspacing="0" cellpadding="0" style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
+                <table width="600px" cellspaUIDg="0" cellpadding="0" style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
                     <tr>
                         <td align="center">
                             <h2 style="color: #2C3E50;">Meeting Confirmation</h2>
-                            <p style="color: #555; font-size: 16px;">Dear <strong>{form_dict['user_name']}</strong>,</p>
+                            <p style="color: #555; font-size: 16px;">Dear <strong>{form_dict['full_name']}</strong>,</p>
                             <p style="color: #555; font-size: 16px;">Thank you for booking your meeting with <strong>Meet</strong>. Below are your meeting details:</p>
                         </td>
                     </tr>
                     <tr>
                         <td>
-                            <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
+                            <table width="100%" cellspaUIDg="0" cellpadding="10" style="border-collapse: collapse;">
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">User:</td>
-                                    <td style="color: #555; font-size: 16px;">Dear. {form_dict['user_name']}</td>
+                                    <td style="color: #555; font-size: 16px;">Dear. {form_dict['full_name']}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">Date:</td>
@@ -246,12 +246,12 @@ async def reschedule(data: models.Reschedule_meeting):
         form_data = dict(form)
         
         #  required fields
-        required_fields = ["meeting_date", "meeting_time", "reason", "meeting_id", "CIN"]
+        required_fields = ["meeting_date", "meeting_time", "reason", "meeting_id", "UID"]
         for field in required_fields:
             if field not in form_data:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="All fields are required")
 
-        user = await conn.booking.meeting.find_one({"CIN": form_data["CIN"]})
+        user = await conn.booking.meeting.find_one({"UID": form_data["UID"]})
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found, please choose a different user.")
 
@@ -286,8 +286,8 @@ async def reschedule(data: models.Reschedule_meeting):
 
         if(existing_meeting['meeting_date'] == new_meeting_date):
             await conn.booking.meeting.count_documents({
-                "user_name": existing_meeting["user_name"],
-                "CIN": existing_meeting["CIN"],
+                "full_name": existing_meeting["full_name"],
+                "UID": existing_meeting["UID"],
                 "meeting_date": new_meeting_date
             })
             # Update the current meeting's date and time
@@ -298,8 +298,8 @@ async def reschedule(data: models.Reschedule_meeting):
                     "meeting_time": new_meeting_time}})
             
             updated_mongo_doc = {
-                "user_name": existing_meeting["user_name"],
-                "CIN": existing_meeting["CIN"],
+                "full_name": existing_meeting["full_name"],
+                "UID": existing_meeting["UID"],
                 "email": existing_meeting["email"],
                 "meeting_date": new_meeting_date,
                 "meeting_time": new_meeting_time,
@@ -312,23 +312,23 @@ async def reschedule(data: models.Reschedule_meeting):
             html_body = f"""
 <html>
 <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
-    <table width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
+    <table width="100%" cellspaUIDg="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
         <tr>
             <td align="center">
-                <table width="600px" cellspacing="0" cellpadding="0" style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
+                <table width="600px" cellspaUIDg="0" cellpadding="0" style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
                     <tr>
                         <td align="center">
                             <h2 style="color: #2C3E50;">Meeting Reschedule Confirmation</h2>
-                            <p style="color: #555; font-size: 16px;">Dear <strong>{existing_meeting['user_name']}</strong>,</p>
+                            <p style="color: #555; font-size: 16px;">Dear <strong>{existing_meeting['full_name']}</strong>,</p>
                             <p style="color: #555; font-size: 16px;">Your meeting with <strong>Meet</strong> has been successfully rescheduled. Below are your updated meeting details:</p>
                         </td>
                     </tr>
                     <tr>
                         <td>
-                            <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
+                            <table width="100%" cellspaUIDg="0" cellpadding="10" style="border-collapse: collapse;">
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">User:</td>
-                                    <td style="color: #555; font-size: 16px;">Dear. {existing_meeting['user_name']}</td>
+                                    <td style="color: #555; font-size: 16px;">Dear. {existing_meeting['full_name']}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Date:</td>
@@ -389,8 +389,8 @@ async def reschedule(data: models.Reschedule_meeting):
 
             #  insert the new meeting into the database
             updated_mongo_doc = {
-                "user_name": existing_meeting["user_name"],
-                "CIN": existing_meeting["CIN"],
+                "full_name": existing_meeting["full_name"],
+                "UID": existing_meeting["UID"],
                 "email": existing_meeting["email"],
                 "meeting_date": new_meeting_date,
                 "meeting_time": new_meeting_time}
@@ -398,23 +398,23 @@ async def reschedule(data: models.Reschedule_meeting):
             html_body = f"""
 <html>
 <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
-    <table width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
+    <table width="100%" cellspaUIDg="0" cellpadding="0" style="background-color: #f4f4f4; padding: 20px;">
         <tr>
             <td align="center">
-                <table width="600px" cellspacing="0" cellpadding="0" style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
+                <table width="600px" cellspaUIDg="0" cellpadding="0" style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1);">
                     <tr>
                         <td align="center">
                             <h2 style="color: #2C3E50;">Meeting Reschedule Confirmation</h2>
-                            <p style="color: #555; font-size: 16px;">Dear <strong>{existing_meeting['user_name']}</strong>,</p>
+                            <p style="color: #555; font-size: 16px;">Dear <strong>{existing_meeting['full_name']}</strong>,</p>
                             <p style="color: #555; font-size: 16px;">Your meeting with <strong>Meet</strong> has been successfully rescheduled. Below are your updated meeting details:</p>
                         </td>
                     </tr>
                     <tr>
                         <td>
-                            <table width="100%" cellspacing="0" cellpadding="10" style="border-collapse: collapse;">
+                            <table width="100%" cellspaUIDg="0" cellpadding="10" style="border-collapse: collapse;">
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">User:</td>
-                                    <td style="color: #555; font-size: 16px;">Dear. {existing_meeting['user_name']}</td>
+                                    <td style="color: #555; font-size: 16px;">Dear. {existing_meeting['full_name']}</td>
                                 </tr>
                                 <tr>
                                     <td style="background-color: #f8f8f8; color: #333; font-size: 16px; font-weight: bold;">New Date:</td>
@@ -496,8 +496,8 @@ async def cancel_meeting(data: models.cancel):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
 
 
-@meet.get("/user/get/available_slots/{CIN}/{date}", status_code=status.HTTP_200_OK)
-async def get_available_slots(CIN: str, date: str):
+@meet.get("/user/get/available_slots/{UID}/{date}", status_code=status.HTTP_200_OK)
+async def get_available_slots(UID: str, date: str):
     try:
         # Validate the date format
         try:
@@ -508,17 +508,17 @@ async def get_available_slots(CIN: str, date: str):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date format. Please use DD-MM-YYYY")
         
         # Check cache first
-        cache_data = await get_meeting_slot(date_str, CIN)
+        cache_data = await get_meeting_slot(date_str, UID)
         if cache_data:
-            logger.info(f"Cache hit for available slots: {CIN} on {date_str}")
-            create_new_log("info", f"Cache hit for available slots: {CIN} on {date_str}", "/api/backend/Meeting")
+            logger.info(f"Cache hit for available slots: {UID} on {date_str}")
+            create_new_log("info", f"Cache hit for available slots: {UID} on {date_str}", "/api/backend/Meeting")
             return cache_data
 
         # Get user details
-        logger.info(f"Cache miss for available slots: {CIN} on {date_str}")
-        user = await conn.public_profile_data.user.find_one({"CIN": CIN})
+        logger.info(f"Cache miss for available slots: {UID} on {date_str}")
+        user = await conn.public_profile_data.user.find_one({"UID": UID})
         if not user:
-            logger.error(f"User not found with CIN: {CIN}")
+            logger.error(f"User not found with UID: {UID}")
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
         # Get user's working time configuration
@@ -541,7 +541,7 @@ async def get_available_slots(CIN: str, date: str):
             # Check if the selected date is on a holiday
             if day_name in holidays:
                 return {
-                    "CIN": CIN,
+                    "UID": UID,
                     "date": date_str,
                     "message": f"User is not available on {day_name.capitalize()}s as it's marked as a holiday",
                     "available_slots": []
@@ -550,7 +550,7 @@ async def get_available_slots(CIN: str, date: str):
             # Check if the selected date is a working day
             if working_days and day_name not in working_days:
                 return {
-                    "CIN": CIN,
+                    "UID": UID,
                     "date": date_str,
                     "message": f"User is not available on {day_name.capitalize()}s. Working days are: {', '.join(d.capitalize() for d in working_days)}",
                     "available_slots": []
@@ -584,7 +584,7 @@ async def get_available_slots(CIN: str, date: str):
         
         # Get all existing meetings for the user on the given date
         meetings = await conn.booking.meeting.find({
-            "CIN": CIN,
+            "UID": UID,
             "meeting_date": date_str
         }).to_list(length=None)
         
@@ -647,7 +647,7 @@ async def get_available_slots(CIN: str, date: str):
         available_slots.sort()
         
         available_dict = {
-            "CIN": CIN,
+            "UID": UID,
             "date": date_str,
             "working_hours": working_hours_array,  # Include all working hours
             "working_days": [day.capitalize() for day in working_days] if working_days else [],
@@ -658,7 +658,7 @@ async def get_available_slots(CIN: str, date: str):
         }
         
         # Cache the result
-        await set_meeting_slot(CIN, date_str, available_dict)
+        await set_meeting_slot(UID, date_str, available_dict)
 
         return available_dict
     
@@ -668,12 +668,12 @@ async def get_available_slots(CIN: str, date: str):
         logger.error(f"Error fetching available slots: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
         
-@meet.get("/refresh/available_slots/{CIN}/{date}", status_code=status.HTTP_200_OK)
-async def refresh_available_slots(CIN: str, date: str):
+@meet.get("/refresh/available_slots/{UID}/{date}", status_code=status.HTTP_200_OK)
+async def refresh_available_slots(UID: str, date: str):
     try:
-        await client.delete(f"meeting_available_slot:{date}:{CIN}")
-        logger.info(f"Cache cleared for available slots: {CIN} on {date}")
-        create_new_log("info", f"Cache cleared for available slots: {CIN} on {date}", "/api/backend/Meeting")
+        await client.delete(f"meeting_available_slot:{date}:{UID}")
+        logger.info(f"Cache cleared for available slots: {UID} on {date}")
+        create_new_log("info", f"Cache cleared for available slots: {UID} on {date}", "/api/backend/Meeting")
         return {"message": "Cache cleared successfully", "status": status.HTTP_200_OK}
     except Exception as e:
         formatted_error = traceback.format_exc()
@@ -683,21 +683,21 @@ async def refresh_available_slots(CIN: str, date: str):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
 
 
-@meet.get("/user/get/busy_date/{CIN}", status_code=status.HTTP_200_OK)
-async def get_busy_dates_api(CIN: str):
+@meet.get("/user/get/busy_date/{UID}", status_code=status.HTTP_200_OK)
+async def get_busy_dates_api(UID: str):
     try:
         # Check cache first
-        cache_data = await get_busy_date(CIN)
+        cache_data = await get_busy_date(UID)
         if cache_data:
             print("data from cache")
-            logger.info(f"Cache hit for busy dates: {CIN}")
-            create_new_log("info", f"Cache hit for busy dates: {CIN}", "/api/backend/Meeting")
+            logger.info(f"Cache hit for busy dates: {UID}")
+            create_new_log("info", f"Cache hit for busy dates: {UID}", "/api/backend/Meeting")
             return cache_data
         print("data from database")
         # Get user details
-        user = await conn.public_profile_data.user.find_one({"CIN": CIN})
+        user = await conn.public_profile_data.user.find_one({"UID": UID})
         if not user:
-            logger.error(f"User not found with CIN: {CIN}")
+            logger.error(f"User not found with UID: {UID}")
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
         # Calculate date range for next 3 months
@@ -714,20 +714,20 @@ async def get_busy_dates_api(CIN: str):
 
         # Get all existing meetings for the user within the next 3 months
         # REMOVED status filter to include ALL meetings for debugging
-        meetings = await conn.booking.meeting.find({"CIN": CIN}).to_list(length=None)
+        meetings = await conn.booking.meeting.find({"UID": UID}).to_list(length=None)
         if not meetings:
-            logger.warning(f"No meetings found for user: {CIN}")
+            logger.warning(f"No meetings found for user: {UID}")
             result = {
-                "CIN": CIN, 
+                "UID": UID, 
                 "busy_dates": [], 
                 "date_range": {"from": today_str, "to": end_date_str},
                 "message": "No meetings found",
                 "user_keys": list(user.keys())
             }
-            await set_busy_date(CIN, result)
+            await set_busy_date(UID, result)
             return result
         print("total meetings",len(meetings))
-        print(f"Found {len(meetings)} total meetings for user {CIN}")
+        print(f"Found {len(meetings)} total meetings for user {UID}")
 
         filtered_meetings = []
         for a in meetings:
@@ -743,15 +743,15 @@ async def get_busy_dates_api(CIN: str):
         # print("working_time", working_time)
         
         if not working_time:
-            logger.warning(f"No working time found for user: {CIN}")
+            logger.warning(f"No working time found for user: {UID}")
             result = {
-                "CIN": CIN, 
+                "UID": UID, 
                 "busy_dates": [], 
                 "date_range": {"from": today_str, "to": end_date_str},
                 "message": "No working time configured",
                 "user_keys": list(user.keys())
             }
-            await set_busy_date(CIN, result)
+            await set_busy_date(UID, result)
             return result
 
         # Extract working days - Multiple strategies
@@ -794,7 +794,7 @@ async def get_busy_dates_api(CIN: str):
                                 if 'days' in item:
                                     working_days.extend([day.lower().strip() for day in item['days']])
         
-        print(f"Final working days for user {CIN}: {working_days}")
+        print(f"Final working days for user {UID}: {working_days}")
         
         # Get average meeting duration
         avg_meeting_duration = int(user.get('avg_meeting_duration', None))  # Default 30 minutes
@@ -847,7 +847,7 @@ async def get_busy_dates_api(CIN: str):
                             total_minutes += max(0, work_minutes)  # Ensure no negative minutes
                             print(f"Total minutes after slot {i}: {total_minutes}")
                         except (ValueError, TypeError) as e:
-                            logger.warning(f"Error parsing time for user {CIN}: {str(e)}")
+                            logger.warning(f"Error parsing time for user {UID}: {str(e)}")
                             continue
             
             print(f"Total working minutes: {total_minutes}")
@@ -895,9 +895,9 @@ async def get_busy_dates_api(CIN: str):
         max_slots_per_day = calculate_available_slots_per_day()
         
         if max_slots_per_day == 0:
-            logger.warning(f"No available slots calculated for user: {CIN}")
+            logger.warning(f"No available slots calculated for user: {UID}")
             result = {
-                "CIN": CIN, 
+                "UID": UID, 
                 "busy_dates": [],
                 "max_slots_per_day": 0,
                 "total_busy_dates": 0,
@@ -905,7 +905,7 @@ async def get_busy_dates_api(CIN: str):
                 "date_range": {"from": today_str, "to": end_date_str},
                 "message": "No available meeting slots configured, error in user schedule",
             }
-            await set_busy_date(CIN, result)
+            await set_busy_date(UID, result)
             return result
 
         # Group filtered_meetings by date (only for dates within range)
@@ -983,7 +983,7 @@ async def get_busy_dates_api(CIN: str):
 
         # Prepare result
         result = {
-            "CIN": CIN,
+            "UID": UID,
             "busy_dates": busy_dates,
             "busy_days_name": busy_dates_with_day_name,
             "max_slots_per_day": max_slots_per_day,
@@ -999,10 +999,10 @@ async def get_busy_dates_api(CIN: str):
         }
         
         # Cache the result
-        await set_busy_date(CIN, today_str, result)
+        await set_busy_date(UID, today_str, result)
 
-        logger.info(f"Successfully calculated busy dates for user {CIN} for next 3 months: {len(busy_dates)} busy dates found")
-        create_new_log("info", f"Successfully calculated busy dates for user {CIN} for next 3 months: {len(busy_dates)} busy dates", "/api/backend/Meeting")
+        logger.info(f"Successfully calculated busy dates for user {UID} for next 3 months: {len(busy_dates)} busy dates found")
+        create_new_log("info", f"Successfully calculated busy dates for user {UID} for next 3 months: {len(busy_dates)} busy dates", "/api/backend/Meeting")
         
         return result
     
@@ -1015,23 +1015,23 @@ async def get_busy_dates_api(CIN: str):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
 
 
-@meet.get("/refresh/get_busy_date/{CIN}", status_code=status.HTTP_200_OK)
-async def refresh_busy_dates(CIN: str):
+@meet.get("/refresh/get_busy_date/{UID}", status_code=status.HTTP_200_OK)
+async def refresh_busy_dates(UID: str):
     try:
         # Get all keys that match the pattern
-        cache_keys = await client.keys(f"busy_date:{CIN}:*")
+        cache_keys = await client.keys(f"busy_date:{UID}:*")
         
         if cache_keys:
             await client.delete(*cache_keys)  # Unpack and delete all matching keys
-            create_new_log("info", f"Deleted cached busy dates for CIN {CIN}", "/api/backend/Meeting")
-            logger.info(f"Deleted {len(cache_keys)} cached busy dates for CIN {CIN}")
+            create_new_log("info", f"Deleted cached busy dates for UID {UID}", "/api/backend/Meeting")
+            logger.info(f"Deleted {len(cache_keys)} cached busy dates for UID {UID}")
             return {
-                "message": f"Deleted {len(cache_keys)} cached busy dates for CIN {CIN}",
+                "message": f"Deleted {len(cache_keys)} cached busy dates for UID {UID}",
                 "status_code": status.HTTP_200_OK
             }
         else:
             return {
-                "message": f"No cached busy dates found for CIN {CIN}",
+                "message": f"No cached busy dates found for UID {UID}",
                 "status_code": status.HTTP_404_NOT_FOUND
             }
 
@@ -1062,12 +1062,12 @@ async def patient_get_previous_meeting(email: str):
         meet = []
         for meeting in meetings:
             meeting_data = {
-                "user_name": meeting["user_name"],
+                "full_name": meeting["full_name"],
                 "meeting_date": meeting["meeting_date"],
                 "meeting_time": meeting["meeting_time"],
                 "status": meeting["status"],
                 "meeting_id": meeting["meeting_id"],
-                "CIN": meeting["CIN"],
+                "UID": meeting["UID"],
                 "number_of_meetings": meeting["number_of_meetings"]
             }
             meet.append(meeting_data)

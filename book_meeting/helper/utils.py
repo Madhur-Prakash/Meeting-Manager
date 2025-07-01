@@ -74,12 +74,12 @@ def  random_number():
         return random_number()
 
 async def cache_meeting(data: dict):
-    meeting_key = f"meeting:{data['meeting_date']}:{data['CIN']}:{data['meeting_id']}"
+    meeting_key = f"meeting:{data['meeting_date']}:{data['UID']}:{data['meeting_id']}"
     await client.hset(meeting_key, mapping={
-        "user_name": data['user_name'],
+        "full_name": data['full_name'],
         "meeting_date": data['meeting_date'],
         "meeting_time": data['meeting_time'],
-        "CIN": data['CIN'],
+        "UID": data['UID'],
         "status": data['status'],
         "meeting_id": data['meeting_id']
     })
@@ -87,7 +87,7 @@ async def cache_meeting(data: dict):
     print("Meeting cached successfully")
 
 async def get_cached_meetings(data: dict):
-    keys = await client.keys(f"meeting:{data['meeting_date']}:{data['CIN']}*")
+    keys = await client.keys(f"meeting:{data['meeting_date']}:{data['UID']}*")
     # print(keys) #debugging
     meetings = []
     for key in keys:
@@ -101,7 +101,7 @@ async def get_cached_meetings(data: dict):
     return None
 
 async def delete_cached_meeting(data: dict):
-    keys = await client.keys(f"meeting:{data['meeting_date']}:{data['CIN']}:{data['meeting_id']}")
+    keys = await client.keys(f"meeting:{data['meeting_date']}:{data['UID']}:{data['meeting_id']}")
     for key in keys:
         await client.delete(key)
     print("Meeting deleted from cache")
@@ -113,8 +113,8 @@ async def insert_in_db(form: dict):
 
             new_meeting = await conn.booking.meeting.insert_one(form)
             count_doc = await conn.booking.meeting.count_documents({
-                "user_name": form["user_name"],
-                "CIN": form["CIN"],
+                "full_name": form["full_name"],
+                "UID": form["UID"],
                 "meeting_date": form["meeting_date"]
             })
             await conn.booking.meeting.update_one({
@@ -133,23 +133,23 @@ async def insert_in_db(form: dict):
             return (form)
 
 
-async def set_meeting_slot(cin: str, date: str, form: dict):
-    meeting_key = f"meeting_available_slot:{form['date']}:{form['CIN']}"
+async def set_meeting_slot(UID: str, date: str, form: dict):
+    meeting_key = f"meeting_available_slot:{form['date']}:{form['UID']}"
     redis_data = {k: json.dumps(v, cls=CustomJSONEncoder) if isinstance(v, (dict, list)) else v 
                       for k, v in form.items()}
     await client.hset(meeting_key, mapping=redis_data)
     await client.expire(meeting_key, 8 * 24 * 60 * 60)  # Cache for 7 days
-    logger.info(f"Meeting slot cached successfully for {cin} on {date}")
+    logger.info(f"Meeting slot cached successfully for {UID} on {date}")
     print("Free meeting slot cached successfully")
 
 
-async def get_meeting_slot(date: str, cin: str):
-    meeting_key = f"meeting_available_slot:{date}:{cin}"
+async def get_meeting_slot(date: str, UID: str):
+    meeting_key = f"meeting_available_slot:{date}:{UID}"
     cached_data = await client.hgetall(meeting_key)
     if cached_data:
         print("Meeting slots fetched from cache")
         return {
-            "CIN": cached_data["CIN"],
+            "UID": cached_data["UID"],
             "date": cached_data["date"],
             "working_hours": json.loads(cached_data["working_hours"]),
             "working_days": json.loads(cached_data["working_days"]),
@@ -162,8 +162,8 @@ async def get_meeting_slot(date: str, cin: str):
         print("No meeting slots available in cache")
         return None
     
-async def get_busy_date(cin: str):
-    pattern = f"busy_date:{cin}:*"
+async def get_busy_date(UID: str):
+    pattern = f"busy_date:{UID}:*"
     try:
         keys = await client.keys(pattern)
         if not keys:
@@ -187,16 +187,16 @@ async def get_busy_date(cin: str):
 
 
 
-async def set_busy_date(cin: str, today: str, form: dict):
+async def set_busy_date(UID: str, today: str, form: dict):
     """Cache busy date data"""
-    key = f"busy_date:{cin}:{today}"
+    key = f"busy_date:{UID}:{today}"
     try:
         redis_data = {k: json.dumps(v, cls=CustomJSONEncoder) if isinstance(v, (dict, list)) else str(v)
                       for k, v in form.items()}
         await client.hset(key, mapping=redis_data)
         await client.expire(key, 8 * 24 * 60 * 60)  # Cache for 8 days
         print("Busy date cached successfully")
-        logger.info(f"Busy date cached successfully for {cin}")
+        logger.info(f"Busy date cached successfully for {UID}")
     except Exception as e:
         logger.error(f"Error caching busy date: {str(e)}")
 
