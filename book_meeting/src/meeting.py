@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from models import models
 import traceback
 from book_meeting.config.redis_config import client
-from ..helper.utils import get_busy_date, setup_logging, cache_meeting, get_cached_meetings, insert_in_db, delete_cached_meeting, send_email, send_email_ses, create_new_log, set_meeting_slot, get_meeting_slot, set_busy_date
+from ..helper.utils import get_busy_date, setup_logging, cache_meeting, get_cached_meetings, insert_in_db, delete_cached_meeting, send_email,send_mail_to_mailhog, send_email_ses, create_new_log, set_meeting_slot, get_meeting_slot, set_busy_date
 from ..config.database import conn
 
 meet = APIRouter()
@@ -218,7 +218,7 @@ async def book_meeting(data: models.Booking):
 </html>
         """
         # send a confirmation email to the user
-        email_sent = send_email(form_dict["email"], "Meeting Confirmation", html_body, retries=3, delay=5)
+        email_sent = send_mail_to_mailhog(form_dict["email"], "Meeting Confirmation", html_body, retries=3, delay=5)
         if not email_sent:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")   
         
@@ -371,7 +371,7 @@ async def reschedule(data: models.Reschedule_meeting):
 </html>
 """
 
-            sent_mail = send_email(existing_meeting["email"], "Meeting Reschedule Confirmation", html_body, retries=3, delay=5)
+            sent_mail = send_mail_to_mailhog(existing_meeting["email"], "Meeting Reschedule Confirmation", html_body, retries=3, delay=5)
             if not sent_mail:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 
@@ -457,7 +457,7 @@ async def reschedule(data: models.Reschedule_meeting):
 </html>
 """
 
-            sent_mail = send_email(existing_meeting["email"], "Meeting Reschedule Confirmation", html_body, retries=3, delay=5)
+            sent_mail = send_mail_to_mailhog(existing_meeting["email"], "Meeting Reschedule Confirmation", html_body, retries=3, delay=5)
             if not sent_mail:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send email. Please try again later.")
 

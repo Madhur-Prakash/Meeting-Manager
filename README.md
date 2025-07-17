@@ -53,8 +53,17 @@ This FastAPI practice project implements a robust user-to-user meeting booking s
 ```bash
    # Run this command to start Redis Stack in detached mode:
    docker run -d --name redis-stack -p 6379:6379 -p 8001:8001 redis/redis-stack:latest
+   # access Redis Stack at 👉 http://localhost:8001
    ```
-7. Set up external logging service:
+
+7. Set up Mailhog:
+```bash
+   # Run this command to start Mailhog in detached mode:
+   docker run -d --name mailhog -p 1025:1025 -p 8025:8025 mailhog/mailhog
+   # access Mailhog at 👉 http://localhost:8025
+```
+
+8. Set up external logging service:
    - Clone the repository:
       ```bash
       git clone https://github.com/Madhur-Prakash/centralized-logging.git
@@ -72,7 +81,7 @@ This FastAPI practice project implements a robust user-to-user meeting booking s
       docker run -d --name logging -p 8000:8000 logging
       ```
 
-8. Set up .env:
+9. Set up .env:
 ```plaintext
 SESSION_SECRET_KEY = "YOUR_SESSION_SECRET_KEY"
 NO_REPLY_EMAIL = "YOUR_NO_REPLY_EMAIL"

@@ -1,5 +1,6 @@
 import json
 import random
+import smtplib
 import string
 import logging
 import os
@@ -272,6 +273,29 @@ def send_email_ses(to_email, subject, body, retries=3, delay=5):
             print(f"Failed to send email due to error: {e}. Retrying in {delay} seconds...")
             print(f"Error: {traceback.format_exc()}")
             time.sleep(delay)
+
+def send_mail_to_mailhog(to_email, subject, body, retries=3, delay=5):
+    """Send an email using MailHog (local SMTP server) with retry mechanism."""
+    for attempt in range(retries):
+        try:
+            msg = MIMEText(body, "html")
+            msg["Subject"] = subject
+            msg["From"] = NO_REPLY_EMAIL
+            msg["To"] = to_email
+
+            with smtplib.SMTP("localhost", 1025) as server:
+                server.sendmail(NO_REPLY_EMAIL, [to_email], msg.as_string())
+
+            print(f"Email sent to {to_email} via MailHog!")
+            return {"status": "success", "to": to_email}
+        except Exception as e:
+            print(f"Failed to send email to MailHog: {e}. Retrying in {delay} seconds...")
+            print(f"Error: {traceback.format_exc()}")
+            time.sleep(delay)
+            return {"status": "failure", "error": str(e)}
+
+    print("Failed to send email to MailHog after multiple attempts.")
+
 
 def create_new_log(log_type: str, message: str, head: str):
     url ="http://127.0.0.1:8000/backend/create_new_logs"
