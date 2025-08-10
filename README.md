@@ -82,9 +82,9 @@ This FastAPI practice project implements a robust user-to-user meeting booking s
       ```
 
 9. Set up .env:
-```plaintext
-SESSION_SECRET_KEY = "YOUR_SESSION_SECRET_KEY"
-NO_REPLY_EMAIL = "YOUR_NO_REPLY_EMAIL"
+
+``` bash
+# Copy the .env.sample file to .env and fill in the required values.
 ```
 ---
 
